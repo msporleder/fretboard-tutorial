@@ -1,0 +1,582 @@
+'use strict';
+
+// ---------- imperative shell: modes + DOM ----------
+
+const $ = (id) => document.getElementById(id);
+const fbSvg = $('fretboard');
+const staffSvg = $('staff');
+const circleSvg = $('circle');
+const rulerSvg = $('ruler');
+const infoEl = $('info');
+const hintEl = $('hint');
+
+let mode = 'notes';
+const st = {
+  showNames: true, selPc: null,             // notes mode
+  keyIdx: 0, fourths: false, minor: false,  // circle mode
+  circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
+  root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
+  frets: [null, null, null, null, null, null], // chord mode: fret per string, null = muted
+  placing: null,                               // chord mode: pc awaiting a position choice
+  finderRoot: 0, finderType: 0,                // finder mode: pc + CHORD_FORMULAS index
+};
+
+const HINTS = {
+  notes: 'click any position to light up that note everywhere on the neck',
+  circle: 'click a key — outer ring majors, inner ring minors; click a position box to number a fingering on the neck',
+  intervals: 'click a root, then a second note to read the spacing — or pick an interval from the menus',
+  chord: 'click frets, staff positions (shift for ♯), or ruler slots to add and remove notes — the nut side for open strings',
+  finder: 'pick a chord — its tones map the neck (the arpeggio); click a fingering to open it in the builder',
+};
+
+// NB: the hidden attribute is HTML-only — it neither hides nor toggles on
+// <svg> elements, so visibility goes through style.display for everything
+const setShown = (elm, visible) => { elm.style.display = visible ? '' : 'none'; };
+function setStaff(visible) { setShown(staffSvg, visible); }
+function setCircle(visible) { setShown($('circlewrap'), visible); }
+function setVoicings(visible) { setShown($('voicings'), visible); }
+function setRuler(visible) { setShown(rulerSvg, visible); }
+function setChart(visible) { setShown($('pitchchart'), visible); }
+
+// ---------- notes mode ----------
+
+function renderNotes() {
+  const markers = [];
+  const octaveColor = st.selPc != null ? octaveColorFor(st.selPc) : null;
+  if (octaveColor) {
+    for (let s = 0; s < 6; s++) {
+      for (let f = 0; f <= NUM_FRETS; f++) {
+        const midi = fretMidi(s, f);
+        if (mod12(midi) === st.selPc) markers.push({ s, f, label: sciName(midiToSpelled(midi)), fill: octaveColor(midi) });
+      }
+    }
+  }
+  drawFretboard(fbSvg, {
+    names: st.showNames, markers,
+    onClick: (s, f) => {
+      const pc = mod12(fretMidi(s, f));
+      st.selPc = st.selPc === pc ? null : pc;
+      render();
+    },
+  });
+  if (st.selPc == null) {
+    infoEl.innerHTML = '';
+  } else {
+    const legend = [];
+    for (let midi = 40 + mod12(st.selPc - 4); midi <= 76; midi += 12) {
+      legend.push(`<b style="color:${octaveColor(midi)}">${sciName(midiToSpelled(midi))}</b>`);
+    }
+    infoEl.innerHTML = `${legend.join(' · ')} — every place it lives on the neck, one color per octave`;
+  }
+
+  drawPitchChart($('pitchchart'), {
+    colorFor: octaveColor,
+    onClick: (midi) => {
+      const pc = mod12(midi);
+      st.selPc = st.selPc === pc ? null : pc;
+      render();
+    },
+  });
+  setStaff(false); setCircle(false); setVoicings(false); setRuler(false); setChart(true);
+}
+
+// ---------- circle mode ----------
+
+function renderCircle() {
+  drawCircle(circleSvg, {
+    fourths: st.fourths,
+    selected: st.minor ? null : st.keyIdx,
+    minorSelected: st.minor ? st.keyIdx : null,
+    onClick: (k, isMinor) => { st.keyIdx = k; st.minor = isMinor; st.circlePos = null; render(); },
+  });
+
+  // minor key root = 6th degree of the relative major, kept in staff range
+  const majRoot = keyRoot(st.keyIdx, 3);
+  let root = st.minor ? majorScale(majRoot)[5] : majRoot;
+  if (spelledToMidi(root) > 57) root = { ...root, octave: root.octave - 1 };
+  const rootPc = mod12(spelledToMidi(root));
+  const scale = scaleFrom(root, st.minor ? MINOR_STEPS : MAJOR_STEPS);
+
+  const arp = st.circleShow === 'arp';
+  const triad = CHORD_FORMULAS[st.minor ? 1 : 0];
+  const spellByPc = arp
+    ? chordSpelling(rootPc, triad)
+    : new Map(scale.slice(0, 7).map((n) => [mod12(spelledToMidi(n)), n]));
+  const pcs = new Set(spellByPc.keys());
+  const boxes = positionBoxes(rootPc, pcs, st.minor ? CAGED_MINOR_SHAPES : CAGED_SHAPES);
+  if (st.circlePos != null && st.circlePos >= boxes.length) st.circlePos = null;
+
+  // big fretboard: everything, or one numbered position box
+  if (st.circlePos == null) {
+    drawFretboard(fbSvg, { markers: markersForPcs(spellByPc, rootPc) });
+  } else {
+    const box = boxes[st.circlePos];
+    const notes = [];
+    for (let s = 5; s >= 0; s--) for (const f of box.frets[s]) notes.push({ s, f, midi: fretMidi(s, f) });
+    notes.sort((a, b) => a.midi - b.midi);
+    const rootColor = octaveColorFor(rootPc);
+    drawFretboard(fbSvg, {
+      markers: notes.map((n, i) => ({ s: n.s, f: n.f, label: String(i + 1), fill: rootColor(n.midi) ?? INK })),
+    });
+  }
+
+  const name = `${spelledName(root)} ${st.minor ? 'minor' : 'major'}`;
+  const tones = [...spellByPc.keys()].length && arp
+    ? triad.ints.map(([s]) => { const sp = spellByPc.get(mod12(rootPc + s)); return LETTERS[sp.letter] + accStr(sp.acc); })
+    : scale.slice(0, 7).map(spelledName);
+  let html = `<b>${name}</b> — ${tones.join(' ')} <span class="muted">(relative ${st.minor ? 'major' : 'minor'}: `
+    + `${st.minor ? CIRCLE_MAJORS[st.keyIdx] : CIRCLE_MINORS[st.keyIdx]})</span>`;
+  if (st.circlePos != null) {
+    const box = boxes[st.circlePos];
+    html += `<br>around the ${box.name}, frets ${box.wLo}–${box.wHi} — numbered low to high`;
+  }
+  infoEl.innerHTML = html;
+
+  const staffNotes = arp
+    ? [...triad.ints.map(([s]) => spellAtMidi(spelledToMidi(root) + s, spellByPc.get(mod12(rootPc + s)))),
+       spellAtMidi(spelledToMidi(root) + 12, spellByPc.get(rootPc))]
+    : scale;
+  drawStaffNotes(staffSvg, staffNotes, { labels: true });
+
+  // position boxes, CAGED-chart style
+  const vbox = $('voicings');
+  vbox.innerHTML = '';
+  const lbl = document.createElement('div');
+  lbl.className = 'vlabel';
+  lbl.textContent = `${arp ? 'arpeggio' : 'scale'} positions — click one to number it on the neck`;
+  vbox.appendChild(lbl);
+  boxes.forEach((b, i) => {
+    const svg = el('svg', { viewBox: '0 0 94 110', class: 'diagram' + (i === st.circlePos ? ' sel' : '') });
+    drawChordDiagram(svg, b.frets, { rootPc, label: b.name });
+    svg.addEventListener('click', () => {
+      st.circlePos = st.circlePos === i ? null : i;
+      render();
+    });
+    vbox.appendChild(svg);
+  });
+
+  setStaff(true); setCircle(true); setVoicings(true); setRuler(false); setChart(false);
+}
+
+// ---------- interval mode ----------
+
+function qualityChoices(degree) {
+  return PERFECT_DEGREES.includes(degree) ? ['d', 'P', 'A'] : ['d', 'm', 'M', 'A'];
+}
+
+// default diatonic reading of a half-step count (1..12)
+const SEMIS_TO_SIMPLE = {
+  1: [2, 'm'], 2: [2, 'M'], 3: [3, 'm'], 4: [3, 'M'], 5: [4, 'P'], 6: [5, 'd'],
+  7: [5, 'P'], 8: [6, 'm'], 9: [6, 'M'], 10: [7, 'm'], 11: [7, 'M'], 12: [8, 'P'],
+};
+
+function rebuildQualitySelect() {
+  const sel = $('quality');
+  const choices = qualityChoices(st.degree);
+  if (!choices.includes(st.quality)) st.quality = choices.includes('M') ? 'M' : 'P';
+  sel.innerHTML = '';
+  for (const q of choices) {
+    const o = document.createElement('option');
+    o.value = q;
+    o.textContent = QUALITY_NAMES[q];
+    o.selected = q === st.quality;
+    sel.appendChild(o);
+  }
+}
+
+// a clicked second note sets the interval menus to its default diatonic reading
+function setTargetFromClick(s, f) {
+  const d = fretMidi(s, f) - fretMidi(st.root.s, st.root.f);
+  if (d === 0) return;
+  const [deg, q] = SEMIS_TO_SIMPLE[((Math.abs(d) - 1) % 12) + 1];
+  st.degree = deg;
+  st.quality = q;
+  st.dir = d > 0 ? 1 : -1;
+  st.target = { s, f };
+  $('degree').value = String(deg);
+  rebuildQualitySelect();
+  $('dir').value = String(st.dir);
+}
+
+function renderInterval() {
+  const markers = [];
+  let html = '';
+
+  if (st.root) {
+    const rootMidi = fretMidi(st.root.s, st.root.f);
+    const root = midiToSpelled(rootMidi);
+    const target = applyInterval(root, st.degree, st.quality, st.dir);
+    const targetPc = mod12(spelledToMidi(target));
+    const semis = intervalSemitones(st.degree, st.quality);
+
+    const targetColor = octaveColorFor(targetPc);
+    for (let s = 0; s < 6; s++) {
+      for (let f = 0; f <= NUM_FRETS; f++) {
+        if (mod12(fretMidi(s, f)) === targetPc && !(s === st.root.s && f === st.root.f)) {
+          const clicked = st.target && s === st.target.s && f === st.target.f;
+          markers.push({
+            s, f, label: sciName(spellAtMidi(fretMidi(s, f), target)),
+            fill: targetColor(fretMidi(s, f)), hollow: !clicked,
+          });
+        }
+      }
+    }
+    markers.push({ s: st.root.s, f: st.root.f, label: sciName(root), fill: ACCENT });
+
+    html = `<b>${intervalName(st.degree, st.quality)}</b> ${st.dir > 0 ? 'up' : 'down'}`
+      + ` — ${semis} half step${semis === 1 ? '' : 's'}<br>`
+      + `${sciName(root)} → <b>${sciName(target)}</b>`;
+    if (st.target) {
+      const d = Math.abs(fretMidi(st.target.s, st.target.f) - rootMidi);
+      if (d > 12) {
+        html += `<br><span class="muted">clicked notes span ${semitoneName(d)} (${d} half steps) — named within the octave</span>`;
+      }
+    }
+    drawStaffNotes(staffSvg, [root, target], {
+      labels: true,
+      colors: [INK, targetColor(spelledToMidi(target)) ?? ACCENT],
+    });
+
+    // ruler: target slot measured upward from the root; a downward interval
+    // lands on its inversion (major 3rd down = minor 6th up to the same pc)
+    const slot = st.dir > 0 ? semis : (12 - semis) % 12;
+    const marks = [{ semis: 0, label: spelledName(root) }];
+    if (slot !== 0) marks.push({ semis: slot, label: spelledName(target) });
+    drawDegreeRuler(rulerSvg, marks, { onClick: rulerSetInterval });
+    if (st.dir < 0 && slot !== 0) {
+      html += `<br><span class="muted">on the ruler: ${semitoneName(slot)} up to the same pitch class — the inversion</span>`;
+    }
+  } else {
+    drawStaffBase(staffSvg);
+    drawDegreeRuler(rulerSvg, [], { onClick: rulerSetInterval });
+  }
+
+  drawFretboard(fbSvg, {
+    names: !st.root, markers,
+    onClick: (s, f, ev) => {
+      if (st.root && s === st.root.s && f === st.root.f) {
+        st.root = null; st.target = null;          // click the root again to clear
+      } else if (!st.root) {
+        st.root = { s, f }; st.target = null;      // first click: root
+      } else if (ev.shiftKey || !st.target) {
+        setTargetFromClick(s, f);                  // second click (or shift-click): target
+      } else {
+        st.root = { s, f }; st.target = null;      // pair done: plain click starts over
+      }
+      render();
+    },
+  });
+  infoEl.innerHTML = html;
+  setStaff(true); setCircle(false); setVoicings(false); setRuler(true); setChart(false);
+}
+
+// clicking a ruler slot picks that interval (upward, default diatonic reading)
+function rulerSetInterval(i) {
+  if (i === 0) return;
+  const [deg, q] = SEMIS_TO_SIMPLE[i];
+  st.degree = deg;
+  st.quality = q;
+  st.dir = 1;
+  st.target = null;
+  $('degree').value = String(deg);
+  rebuildQualitySelect();
+  $('dir').value = '1';
+  render();
+}
+
+// ---------- chord mode ----------
+
+function renderChord() {
+  const sounding = []; // [{s, f, midi}] low string first
+  for (let s = 5; s >= 0; s--) {
+    if (st.frets[s] != null) sounding.push({ s, f: st.frets[s], midi: fretMidi(s, st.frets[s]) });
+  }
+  const midis = sounding.map((n) => n.midi);
+  const matches = identifyChords(midis);
+  const best = matches[0];
+  const spellByPc = best ? chordSpelling(best.root, best.formula) : null;
+  const spellOf = (midi) => spellByPc?.get(mod12(midi)) ?? midiToSpelled(midi);
+
+  // a stale placing pc (already sounding, or nowhere to go) clears itself
+  if (st.placing != null && midis.some((m) => mod12(m) === st.placing)) st.placing = null;
+
+  const markers = sounding.map((n) => ({
+    s: n.s, f: n.f,
+    label: sciName(spellAtMidi(n.midi, spellOf(n.midi))),
+    fill: best && mod12(n.midi) === best.root ? ACCENT : INK,
+  }));
+  if (st.placing != null) {
+    const color = octaveColorFor(st.placing);
+    for (const c of candidatesFor((m) => mod12(m) === st.placing)) {
+      markers.push({ s: c.s, f: c.f, label: sciName(midiToSpelled(c.midi)), fill: color(c.midi), hollow: true });
+    }
+  }
+  drawFretboard(fbSvg, {
+    names: sounding.length === 0, markers,
+    onClick: (s, f) => {
+      st.frets[s] = st.frets[s] === f ? null : f;
+      st.placing = null;
+      render();
+    },
+  });
+
+  let html = '';
+  if (sounding.length > 0) {
+    const names = sounding.map((n) => sciName(spellAtMidi(n.midi, spellOf(n.midi))));
+    html += `notes: <b>${names.join(' – ')}</b>`;
+    const gaps = [];
+    for (let i = 1; i < sounding.length; i++) {
+      const d = sounding[i].midi - sounding[i - 1].midi;
+      gaps.push(`${semitoneName(Math.abs(d))} (${d > 0 ? '' : '−'}${Math.abs(d)})`);
+    }
+    if (gaps.length) html += `<br>spacing: ${gaps.join(', ')}`;
+    if (matches.length) {
+      const spelled = best.formula.ints.map(([semis]) => {
+        const sp = spellByPc.get(mod12(best.root + semis));
+        return LETTERS[sp.letter] + accStr(sp.acc);
+      });
+      const fromRoot = best.formula.ints.filter(([semis]) => semis !== 0).map(([semis]) => {
+        const sp = spellByPc.get(mod12(best.root + semis));
+        return `${LETTERS[sp.letter] + accStr(sp.acc)} = ${semitoneName(semis)} (${semis})`;
+      });
+      html += `<br>from ${pcName(best.root)}: ${fromRoot.join(', ')}`;
+      html += `<br>chord: <b>${chordName(best)}</b> <span class="muted">(${spelled.join(' ')})</span>`;
+      if (matches.length > 1) {
+        html += `<br><span class="muted">also reads as: ${matches.slice(1, 4).map(chordName).join(', ')}</span>`;
+      }
+    } else if (new Set(midis.map(mod12)).size >= 3) {
+      html += `<br><span class="muted">no standard chord name for this one</span>`;
+    }
+  }
+  infoEl.innerHTML = html;
+
+  // toggle every string sounding a matched pitch, or place it on a free string
+  const togglePitch = (pred) => {
+    st.placing = null;
+    const hits = [];
+    for (let s = 0; s < 6; s++) {
+      if (st.frets[s] != null && pred(fretMidi(s, st.frets[s]))) hits.push(s);
+    }
+    if (hits.length) hits.forEach((s) => { st.frets[s] = null; });
+    else placeOnFree(pred);
+    render();
+  };
+
+  drawStaffNotes(staffSvg, sounding.map((n) => ({
+    ...spellAtMidi(n.midi, spellOf(n.midi)),
+    color: best && mod12(n.midi) === best.root ? ACCENT : INK,
+  })), {
+    chord: true,
+    onClick: (dia, ev) => {
+      // written line/space -> sounding natural midi, shift for sharp
+      const midi = 12 * Math.floor(dia / 7) + LETTER_PC[dia % 7] + (ev.shiftKey ? 1 : 0);
+      togglePitch((m) => m === midi);
+    },
+  });
+
+  // ruler anchor: identified root, else the lowest sounding note
+  const anchor = best ? best.root : midis.length ? mod12(Math.min(...midis)) : null;
+  const marks = anchor == null ? [] : [...new Set(midis.map(mod12))].map((pc) => {
+    const sp = spellOf(pc);
+    return { semis: mod12(pc - anchor), label: LETTERS[sp.letter] + accStr(sp.acc) };
+  });
+  if (st.placing != null && anchor != null) {
+    const sp = midiToSpelled(st.placing);
+    marks.push({ semis: mod12(st.placing - anchor), label: spelledName(sp), hollow: true });
+  }
+  drawDegreeRuler(rulerSvg, marks, {
+    onClick: (i) => {
+      if (anchor == null) return; // nothing to be relative to yet
+      const pc = mod12(anchor + i);
+      if (midis.some((m) => mod12(m) === pc)) {
+        st.placing = null;
+        togglePitch((m) => mod12(m) === pc); // present: remove everywhere
+        return;
+      }
+      if (st.placing === pc) { st.placing = null; render(); return; } // second click cancels
+      const cands = candidatesFor((m) => mod12(m) === pc);
+      if (cands.length <= 1) {
+        if (cands.length) st.frets[cands[0].s] = cands[0].f;
+        st.placing = null;
+      } else {
+        st.placing = pc; // several spots: show them, colored by octave
+      }
+      render();
+    },
+  });
+  if (st.placing != null) {
+    hintEl.textContent = `pick a spot for ${pcName(st.placing)} — hollow markers are the options, one color per octave`;
+  }
+  setStaff(true); setCircle(false); setVoicings(false); setRuler(true); setChart(false);
+}
+
+// every playable spot for a pitch (pred over sounding midi): free strings if
+// any fit, else re-fret spots for strings whose tone is doubled elsewhere.
+// Fretted span stays within a hand's reach; scored to prefer low positions
+// above the current bass.
+function candidatesFor(pred) {
+  const lowest = Math.min(...st.frets.map((f, s) => (f != null ? fretMidi(s, f) : Infinity)));
+  const scan = (strings) => {
+    const out = [];
+    for (const s of strings) {
+      const others = st.frets.filter((f, i) => i !== s && f != null && f > 0);
+      for (let f = 0; f <= NUM_FRETS; f++) {
+        const m = fretMidi(s, f);
+        if (!pred(m)) continue;
+        const nf = f > 0 ? [...others, f] : others;
+        const span = nf.length ? Math.max(...nf) - Math.min(...nf) : 0;
+        if (span > 3) continue;
+        out.push({ s, f, midi: m, score: span * 10 + f + (m < lowest ? 500 : 0) });
+      }
+    }
+    return out;
+  };
+
+  const all = [0, 1, 2, 3, 4, 5];
+  let list = scan(all.filter((s) => st.frets[s] == null));
+  if (!list.length) {
+    const counts = {};
+    for (const s of all) {
+      if (st.frets[s] == null) continue;
+      const pc = mod12(fretMidi(s, st.frets[s]));
+      counts[pc] = (counts[pc] ?? 0) + 1;
+    }
+    list = scan(all.filter((s) => st.frets[s] != null && counts[mod12(fretMidi(s, st.frets[s]))] >= 2));
+  }
+  return list.sort((a, b) => a.score - b.score);
+}
+
+function placeOnFree(pred) {
+  const spot = candidatesFor(pred)[0];
+  if (spot) st.frets[spot.s] = spot.f;
+}
+
+// ---------- finder mode: chord name -> arpeggio map + fingerings ----------
+
+function renderFinder() {
+  const formula = CHORD_FORMULAS[st.finderType];
+  const rootPc = st.finderRoot;
+  const spellByPc = chordSpelling(rootPc, formula);
+  drawFretboard(fbSvg, { markers: markersForPcs(spellByPc, rootPc) });
+
+  const tones = formula.ints.map(([s]) => {
+    const sp = spellByPc.get(mod12(rootPc + s));
+    return LETTERS[sp.letter] + accStr(sp.acc);
+  });
+
+  // arpeggio: tones ascending from the root, octave root on top
+  const rootMidi = 48 + rootPc; // C3-based
+  const arp = formula.ints.map(([s]) => spellAtMidi(rootMidi + s, spellByPc.get(mod12(rootPc + s))));
+  arp.push(spellAtMidi(rootMidi + 12, spellByPc.get(rootPc)));
+  drawStaffNotes(staffSvg, arp, { labels: true });
+
+  drawDegreeRuler(rulerSvg, formula.ints.map(([s]) => {
+    const sp = spellByPc.get(mod12(rootPc + s));
+    return { semis: s, label: LETTERS[sp.letter] + accStr(sp.acc) };
+  }));
+
+  const box = $('voicings');
+  box.innerHTML = '';
+  const addDiagram = (frets, label) => {
+    const svg = el('svg', { viewBox: label ? '0 0 94 96' : '0 0 94 82', class: 'diagram' });
+    drawChordDiagram(svg, frets, { rootPc, label });
+    if (frets.every((f) => f == null || f <= NUM_FRETS)) {
+      svg.addEventListener('click', () => {
+        st.frets = [...frets];
+        mode = 'chord';
+        history.replaceState(null, '', '#chord');
+        render();
+      });
+    }
+    box.appendChild(svg);
+  };
+
+  const shapeRow =
+    formula.sym === '' ? { label: 'CAGED — the five shapes up the neck', shapes: cagedShapes(rootPc) }
+    : formula.sym === 'm' ? { label: 'CAGED minor — the five shapes with the 3rd flattened', shapes: cagedShapes(rootPc, CAGED_MINOR_SHAPES) }
+    : formula.sym === 'dim7' ? { label: 'dim7 is symmetric — one shape, every three frets, each an inversion', shapes: dim7Positions(rootPc) }
+    : null;
+  if (shapeRow) {
+    const lbl = document.createElement('div');
+    lbl.className = 'vlabel';
+    lbl.textContent = shapeRow.label;
+    box.appendChild(lbl);
+    for (const sh of shapeRow.shapes) addDiagram(sh.frets, sh.name);
+    const lbl2 = document.createElement('div');
+    lbl2.className = 'vlabel';
+    lbl2.textContent = 'fingerings';
+    box.appendChild(lbl2);
+  }
+
+  const vs = voicings(rootPc, formula);
+  const shown = vs.slice(0, 12);
+  for (const v of shown) addDiagram(v.frets);
+
+  infoEl.innerHTML = `<b>${pcName(rootPc)}${formula.sym}</b> <span class="muted">(${tones.join(' ')})</span>`
+    + ` — ${vs.length} fingering${vs.length === 1 ? '' : 's'}${vs.length > shown.length ? `, showing ${shown.length}` : ''}`;
+  setStaff(true); setCircle(false); setVoicings(true); setRuler(true); setChart(false);
+}
+
+// ---------- dispatch + wiring ----------
+
+const RENDERERS = { notes: renderNotes, circle: renderCircle, intervals: renderInterval, chord: renderChord, finder: renderFinder };
+
+function render() {
+  for (const btn of document.querySelectorAll('#modes button')) {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  }
+  for (const span of document.querySelectorAll('#controls .ctl')) {
+    span.hidden = span.id !== 'ctl-' + mode;
+  }
+  hintEl.textContent = HINTS[mode];
+  RENDERERS[mode]();
+}
+
+for (const btn of document.querySelectorAll('#modes button')) {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode;
+    history.replaceState(null, '', '#' + mode);
+    render();
+  });
+}
+
+$('shownames').addEventListener('change', (e) => { st.showNames = e.target.checked; render(); });
+
+$('dirbtn').addEventListener('click', () => {
+  st.fourths = !st.fourths;
+  $('dirbtn').textContent = st.fourths ? 'view in 5ths' : 'view in 4ths';
+  render();
+});
+
+$('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
+
+$('degree').addEventListener('change', (e) => {
+  st.degree = parseInt(e.target.value, 10);
+  st.target = null;
+  rebuildQualitySelect();
+  render();
+});
+$('quality').addEventListener('change', (e) => { st.quality = e.target.value; st.target = null; render(); });
+$('dir').addEventListener('change', (e) => { st.dir = parseInt(e.target.value, 10); st.target = null; render(); });
+
+$('clearchord').addEventListener('click', () => { st.frets.fill(null); st.placing = null; render(); });
+
+for (let pc = 0; pc < 12; pc++) {
+  const o = document.createElement('option');
+  o.value = String(pc);
+  o.textContent = pcName(pc);
+  $('chordroot').appendChild(o);
+}
+CHORD_FORMULAS.forEach((f, i) => {
+  const o = document.createElement('option');
+  o.value = String(i);
+  o.textContent = f.label;
+  $('chordtype').appendChild(o);
+});
+$('chordroot').addEventListener('change', (e) => { st.finderRoot = parseInt(e.target.value, 10); render(); });
+$('chordtype').addEventListener('change', (e) => { st.finderType = parseInt(e.target.value, 10); render(); });
+
+const hash = location.hash.slice(1);
+if (RENDERERS[hash]) mode = hash;
+rebuildQualitySelect();
+render();

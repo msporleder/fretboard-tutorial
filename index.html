@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fretboard tutorial</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>fretboard tutorial</h1>
+
+  <nav id="modes">
+    <button data-mode="notes" class="active">Notes</button>
+    <button data-mode="circle">Circle of 5ths</button>
+    <button data-mode="intervals">Intervals</button>
+    <button data-mode="chord">Chord builder</button>
+    <button data-mode="finder">Chord finder</button>
+    <a href="tutorial.html">Tutorial →</a>
+  </nav>
+
+  <div id="controls">
+    <label class="ctl" id="ctl-notes"><input type="checkbox" id="shownames" checked> show note names</label>
+    <span class="ctl" id="ctl-circle" hidden>
+      <button id="dirbtn">view in 4ths</button>
+      <select id="circleshow">
+        <option value="scale" selected>scale</option>
+        <option value="arp">tonic arpeggio</option>
+      </select>
+    </span>
+    <span class="ctl" id="ctl-intervals" hidden>
+      <select id="degree">
+        <option value="2">2nd</option>
+        <option value="3" selected>3rd</option>
+        <option value="4">4th</option>
+        <option value="5">5th</option>
+        <option value="6">6th</option>
+        <option value="7">7th</option>
+        <option value="8">octave</option>
+      </select>
+      <select id="quality"></select>
+      <select id="dir">
+        <option value="1" selected>up</option>
+        <option value="-1">down</option>
+      </select>
+    </span>
+    <span class="ctl" id="ctl-chord" hidden><button id="clearchord">clear</button></span>
+    <span class="ctl" id="ctl-finder" hidden>
+      <select id="chordroot"></select>
+      <select id="chordtype"></select>
+    </span>
+  </div>
+
+  <p id="hint"></p>
+
+  <svg id="fretboard" viewBox="0 0 870 200" aria-label="guitar fretboard"></svg>
+
+  <svg id="pitchchart" viewBox="0 0 860 240" aria-label="pitch chart"></svg>
+
+  <div id="circlewrap">
+    <svg id="circle" viewBox="0 0 320 320" aria-label="circle of fifths"></svg>
+  </div>
+
+  <div id="info"></div>
+
+  <svg id="ruler" viewBox="0 0 360 68" aria-label="degree ruler"></svg>
+
+  <div id="voicings"></div>
+
+  <svg id="staff" viewBox="0 -10 360 260" aria-label="music staff"></svg>
+</main>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

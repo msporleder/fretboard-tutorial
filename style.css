@@ -1,0 +1,195 @@
+:root {
+  --ink: #1a1a1a;
+  --paper: #faf8f2;
+  --accent: #b0413e;
+  --muted: #8a867c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  background: var(--paper);
+  color: var(--ink);
+  display: flex;
+  justify-content: center;
+}
+
+main {
+  width: min(920px, 100vw);
+  padding: 1rem;
+  text-align: center;
+}
+
+h1 {
+  font-size: 1.4rem;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  margin: 0.5rem 0 1rem;
+}
+
+#modes {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+#modes a {
+  color: var(--accent);
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+}
+
+button {
+  font: inherit;
+  padding: 0.4rem 1rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#modes button.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+#controls {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  min-height: 2.4rem;
+}
+
+select {
+  font: inherit;
+  padding: 0.3rem;
+}
+
+#hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+  min-height: 1.2em;
+  margin: 0.25rem 0 0.5rem;
+}
+
+#fretboard {
+  width: 100%;
+  height: auto;
+}
+
+#fretboard .cell, #circle .key { cursor: pointer; }
+
+#circlewrap svg {
+  width: min(340px, 90vw);
+  height: auto;
+  margin: 0.5rem auto;
+}
+
+#info {
+  font-size: 1.05rem;
+  min-height: 2.6em;
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.muted { color: var(--muted); font-size: 0.9em; }
+
+#voicings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  margin: 0.5rem 0;
+}
+
+#voicings .vlabel {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+#ruler {
+  display: block;
+  width: min(440px, 95vw);
+  height: auto;
+  margin: 0.25rem auto;
+}
+
+#ruler .cell, #staff .cell, #pitchchart .cell { cursor: pointer; }
+
+#pitchchart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0.75rem 0;
+}
+
+#voicings .diagram, .tutorial .diagram {
+  width: 86px;
+  height: auto;
+}
+
+#voicings .diagram {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+#voicings .diagram:hover { border-color: var(--muted); }
+
+#voicings .diagram.sel { border-color: var(--accent); }
+
+#staff {
+  width: min(420px, 95vw);
+  height: auto;
+  margin: 0 auto;
+}
+
+/* ---------- tutorial page ---------- */
+
+main.tutorial { text-align: left; }
+main.tutorial h1, main.tutorial > p.lede { text-align: center; }
+
+.tutorial section {
+  margin: 2.5rem 0;
+}
+
+.tutorial h2 {
+  font-size: 1.15rem;
+  font-weight: normal;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #ddd8cc;
+  padding-bottom: 0.3rem;
+}
+
+.tutorial p { line-height: 1.6; }
+
+.tutorial svg.fb { width: 100%; height: auto; }
+.tutorial svg.small { width: min(340px, 90vw); height: auto; display: block; margin: 0.5rem auto; }
+
+.tutorial .try {
+  font-size: 0.9rem;
+}
+.tutorial a { color: var(--accent); }
+
+.tutorial table {
+  border-collapse: collapse;
+  margin: 0.5rem auto;
+  font-size: 0.9rem;
+}
+.tutorial th, .tutorial td {
+  border: 1px solid #ddd8cc;
+  padding: 0.3rem 0.7rem;
+  text-align: center;
+}
+.tutorial th { font-weight: normal; font-style: italic; color: var(--muted); }
