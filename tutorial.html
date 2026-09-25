@@ -9,7 +9,7 @@
 <body>
 <main class="tutorial">
   <h1>fretboard tutorial — the tour</h1>
-  <p class="lede">Four ideas, one neck. Everything here is also an
+  <p class="lede">Six views, one neck. Everything here is also an
     <a href="index.html">interactive toy</a>.</p>
 
   <section>
@@ -19,8 +19,16 @@
       marks the reset. Notice the same note lives in several places: that
       redundancy is the whole character of the instrument.</p>
     <svg id="fb-notes" class="fb" viewBox="0 0 870 200" aria-label="fretboard with all note names"></svg>
+    <p>The redundancy is easiest to see on a chart from the 19th-century method
+      books (this one follows Aguado's <i>Nuevo Método para Guitarra</i>): every
+      pitch from E2 to E5 is a column, with its position on the staff and, below,
+      the fret where it lives on each string. Reading down a column finds every
+      unison; reading along a string row walks up the neck. Here with <b>B</b>
+      picked out — <b>one color per octave</b>, a convention used everywhere in
+      the toy: same color means the same pitch, different colors are octaves:</p>
+    <svg id="t-chart" viewBox="0 0 860 240" aria-label="pitch chart" style="width:100%;height:auto"></svg>
     <p class="try">Try it: <a href="index.html#notes">Notes mode</a> — click any
-      position to light up that note everywhere.</p>
+      position (or any chart column) to light that note up everywhere.</p>
   </section>
 
   <section>
@@ -31,12 +39,17 @@
       relative minor — same notes, different home.</p>
     <svg id="circ" class="small" viewBox="0 0 320 320" aria-label="circle of fifths"></svg>
     <p>Pick a key and its major scale falls onto the neck. Here is <b>G major</b>
-      (one sharp — F♯), root notes in red:</p>
+      (one sharp — F♯), roots colored by octave:</p>
     <svg id="fb-gmajor" class="fb" viewBox="0 0 870 200" aria-label="G major scale on the fretboard"></svg>
+    <p>A whole-neck map is too much to practice at once, so it splits into five
+      <b>position boxes</b> — five-fret windows anchored on the CAGED shapes
+      (section 6). Together they tile the neck; each one is a day's worth of
+      scale practice:</p>
+    <div id="g-boxes" style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap"></div>
     <p class="try">Try it: <a href="index.html#circle">Circle mode</a> — click
       around the circle (inner ring for the minors), flip the view to run in
-      4ths, and click a position box to get a numbered scale or arpeggio
-      fingering on the neck.</p>
+      4ths, switch between scale and tonic arpeggio, and click a position box to
+      get a numbered playing order on the neck.</p>
   </section>
 
   <section>
@@ -51,9 +64,12 @@
       <tr><th>half steps</th><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td></tr>
     </table>
     <p>A <b>major 3rd up from G</b> (4 half steps) is B. The solid marker is the
-      root; hollow markers are every B on the neck. On the staff:</p>
+      root; hollow markers are every B on the neck, colored by octave. On the
+      staff, and on the chromatic ruler — one octave up from the root, with the
+      major-scale degree positions shaded:</p>
     <svg id="fb-interval" class="fb" viewBox="0 0 870 200" aria-label="major third from G on the fretboard"></svg>
     <svg id="staff-interval" class="small" viewBox="0 -10 360 260" aria-label="G to B on the staff"></svg>
+    <svg id="ruler-interval" class="small" viewBox="0 0 360 68" aria-label="degree ruler showing a major third"></svg>
     <p>One caveat that trips everyone: interval <i>shapes</i> repeat across the
       neck, but the B string is tuned a major 3rd above the G string instead of
       a 4th — any shape that crosses onto the B (or high E) string shifts up one
@@ -70,17 +86,18 @@
     <svg id="fb-chord" class="fb" viewBox="0 0 870 200" aria-label="open C major chord"></svg>
     <p id="chord-analysis"></p>
     <svg id="staff-chord" class="small" viewBox="0 -10 360 260" aria-label="C major chord on the staff"></svg>
-    <p>A chord's shape is easiest to see on a chromatic ruler — the 12 half
-      steps of one octave from the root, with the major-scale degree positions
-      shaded. Major chord tones land on R, 3 and 5; a minor chord's third falls
-      one slot left, on the unshaded ♭3:</p>
+    <p>A chord's shape is easiest to see on the same chromatic ruler from
+      section 3. Major chord tones land on R, 3 and 5; a minor chord's third
+      falls one slot left, on the unshaded ♭3:</p>
     <svg id="t-ruler" class="small" viewBox="0 0 360 68" aria-label="degree ruler"></svg>
     <p>The same set of notes can spell more than one chord — add an A under
       C–E–G and it reads as both Am7 and C6. The builder shows every reading it
       knows.</p>
     <p class="try">Try it: <a href="index.html#chord">Chord builder</a> — click
-      frets on the neck and it names what you made, with the spelling and the
-      spacing between the notes.</p>
+      frets on the neck and it names what you made, with the spelling, the
+      spacing between neighbors, and each tone's interval from the root. The
+      staff and the ruler are clickable too: tap a ruler slot to add that tone
+      (it offers the octave options), tap a staff line to add that pitch.</p>
   </section>
 
   <section>
@@ -91,7 +108,7 @@
       playable fingerings: mutes only at the edges, fretted notes within a
       four-fret reach, every chord tone present. The classic open shapes fall
       out on their own — here are four of the <b>C major</b> fingerings it
-      finds (root dots in red):</p>
+      finds (root dots colored by octave):</p>
     <div id="c-voicings" style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap"></div>
     <p class="try">Try it: <a href="index.html#finder">Chord finder</a> — pick a
       root and a chord type; click any fingering to open it in the builder.</p>
@@ -104,14 +121,21 @@
       used to do) and it stays the same chord type with a new root. Better:
       for any one chord, the five shapes connect end to end and tile the whole
       fretboard. Here is <b>C major</b> through all five positions, low to
-      high — notice each shape begins where the previous one ends, and the red
-      root notes are the seams:</p>
+      high — notice each shape begins where the previous one ends, and the
+      octave-colored root notes are the seams:</p>
     <div id="caged-row" style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap"></div>
     <p>Lay these over the arpeggio map from section 5 and they account for
       every marker on the neck. That is the whole CAGED system: five shapes,
       one octave of neck, repeat.</p>
-    <p class="try">Try it: <a href="index.html#finder">Chord finder</a> — any
-      major chord shows its five CAGED positions above the fingerings.</p>
+    <p><b>Minor</b> works the same way — flatten the 3rd in each shape. The Em,
+      Am and Dm grips stay easy; the Cm and Gm ones are famously awkward, which
+      is why most teaching leans on the other three. <b>Dim7</b> needs no CAGED
+      at all: it stacks minor 3rds, so it is symmetric — one grip repeats every
+      three frets, and each repetition is an inversion of the same chord.
+      <b>C°7</b> in all four positions:</p>
+    <div id="dim7-row" style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap"></div>
+    <p class="try">Try it: <a href="index.html#finder">Chord finder</a> — major,
+      minor and dim7 chords each show their shape system above the fingerings.</p>
   </section>
 </main>
 <script src="core.js"></script>
