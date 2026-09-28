@@ -150,3 +150,30 @@ assert(spelledName(majorScale(keyRoot(1, 3))[5]) === "E", "relative minor of G")
     });
   }
 }
+// ---------- bass ----------
+setInstrument('bass');
+assert(nStr() === 4 && fretMidi(3, 0) === 28 && fretMidi(0, 12) === 55, "bass tuning");
+// octave colors anchor at E1
+assert(octaveColorFor(4)(28) === OCTAVE_COLORS[0] && octaveColorFor(4)(40) === OCTAVE_COLORS[1]
+  && octaveColorFor(4)(52) === OCTAVE_COLORS[2], "bass octave anchor");
+// position boxes: root-anchored, valid notes, ordered
+{
+  const scale = majorScale(keyRoot(0, 2));
+  const pcs = new Set(scale.slice(0, 7).map((n) => mod12(spelledToMidi(n))));
+  const boxes = positionBoxes(0, pcs);
+  assert(boxes.length >= 2 && boxes.length <= 3, "bass box count: " + boxes.length);
+  assert(boxes.every((b) => b.name.startsWith('root on ')), "bass box names: " + boxes.map((b) => b.name));
+  for (const b of boxes) {
+    assert(b.frets.length === 4, "bass box rows");
+    b.frets.forEach((fs, s) => fs.forEach((f) => {
+      assert(f >= b.wLo && f <= b.wHi && pcs.has(mod12(fretMidi(s, f))), `bass box note ${b.name} ${s}/${f}`);
+    }));
+  }
+  for (let i = 1; i < boxes.length; i++) assert(boxes[i].wLo > boxes[i - 1].wLo, "bass boxes ordered");
+}
+// voicing search still sound on 4 strings
+{
+  const vE5 = voicings(4, CHORD_FORMULAS.find((f) => f.sym === '5'));
+  assert(vE5.some((v) => v.frets.every((f, i) => f === [null, 2, 2, 0][i])), "bass E5 shape");
+}
+setInstrument('guitar');

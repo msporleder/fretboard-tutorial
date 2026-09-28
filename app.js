@@ -3,6 +3,9 @@
 // ---------- imperative shell: modes + DOM ----------
 
 const $ = (id) => document.getElementById(id);
+
+setInstrument(new URLSearchParams(location.search).get('inst') ?? 'guitar');
+
 const fbSvg = $('fretboard');
 const staffSvg = $('staff');
 const circleSvg = $('circle');
@@ -16,7 +19,7 @@ const st = {
   keyIdx: 0, fourths: false, minor: false,  // circle mode
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
   root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
-  frets: [null, null, null, null, null, null], // chord mode: fret per string, null = muted
+  frets: new Array(nStr()).fill(null),         // chord mode: fret per string, null = muted
   placing: null,                               // chord mode: pc awaiting a position choice
   finderRoot: 0, finderType: 0,                // finder mode: pc + CHORD_FORMULAS index
 };
@@ -44,7 +47,7 @@ function renderNotes() {
   const markers = [];
   const octaveColor = st.selPc != null ? octaveColorFor(st.selPc) : null;
   if (octaveColor) {
-    for (let s = 0; s < 6; s++) {
+    for (let s = 0; s < nStr(); s++) {
       for (let f = 0; f <= NUM_FRETS; f++) {
         const midi = fretMidi(s, f);
         if (mod12(midi) === st.selPc) markers.push({ s, f, label: sciName(midiToSpelled(midi)), fill: octaveColor(midi) });
@@ -63,7 +66,8 @@ function renderNotes() {
     infoEl.innerHTML = '';
   } else {
     const legend = [];
-    for (let midi = 40 + mod12(st.selPc - 4); midi <= 76; midi += 12) {
+    const low = STRING_MIDI[nStr() - 1];
+    for (let midi = low + mod12(st.selPc - low); midi <= STRING_MIDI[0] + NUM_FRETS; midi += 12) {
       legend.push(`<b style="color:${octaveColor(midi)}">${sciName(midiToSpelled(midi))}</b>`);
     }
     infoEl.innerHTML = `${legend.join(' · ')} — every place it lives on the neck, one color per octave`;
@@ -91,9 +95,9 @@ function renderCircle() {
   });
 
   // minor key root = 6th degree of the relative major, kept in staff range
-  const majRoot = keyRoot(st.keyIdx, 3);
+  const majRoot = keyRoot(st.keyIdx, INSTRUMENT.scaleOctave);
   let root = st.minor ? majorScale(majRoot)[5] : majRoot;
-  if (spelledToMidi(root) > 57) root = { ...root, octave: root.octave - 1 };
+  if (spelledToMidi(root) > INSTRUMENT.rootMax) root = { ...root, octave: root.octave - 1 };
   const rootPc = mod12(spelledToMidi(root));
   const scale = scaleFrom(root, st.minor ? MINOR_STEPS : MAJOR_STEPS);
 
@@ -112,7 +116,7 @@ function renderCircle() {
   } else {
     const box = boxes[st.circlePos];
     const notes = [];
-    for (let s = 5; s >= 0; s--) for (const f of box.frets[s]) notes.push({ s, f, midi: fretMidi(s, f) });
+    for (let s = nStr() - 1; s >= 0; s--) for (const f of box.frets[s]) notes.push({ s, f, midi: fretMidi(s, f) });
     notes.sort((a, b) => a.midi - b.midi);
     const rootColor = octaveColorFor(rootPc);
     drawFretboard(fbSvg, {
@@ -210,7 +214,7 @@ function renderInterval() {
     const semis = intervalSemitones(st.degree, st.quality);
 
     const targetColor = octaveColorFor(targetPc);
-    for (let s = 0; s < 6; s++) {
+    for (let s = 0; s < nStr(); s++) {
       for (let f = 0; f <= NUM_FRETS; f++) {
         if (mod12(fretMidi(s, f)) === targetPc && !(s === st.root.s && f === st.root.f)) {
           const clicked = st.target && s === st.target.s && f === st.target.f;
@@ -288,7 +292,7 @@ function rulerSetInterval(i) {
 
 function renderChord() {
   const sounding = []; // [{s, f, midi}] low string first
-  for (let s = 5; s >= 0; s--) {
+  for (let s = nStr() - 1; s >= 0; s--) {
     if (st.frets[s] != null) sounding.push({ s, f: st.frets[s], midi: fretMidi(s, st.frets[s]) });
   }
   const midis = sounding.map((n) => n.midi);
@@ -354,7 +358,7 @@ function renderChord() {
   const togglePitch = (pred) => {
     st.placing = null;
     const hits = [];
-    for (let s = 0; s < 6; s++) {
+    for (let s = 0; s < nStr(); s++) {
       if (st.frets[s] != null && pred(fretMidi(s, st.frets[s]))) hits.push(s);
     }
     if (hits.length) hits.forEach((s) => { st.frets[s] = null; });
@@ -432,7 +436,7 @@ function candidatesFor(pred) {
     return out;
   };
 
-  const all = [0, 1, 2, 3, 4, 5];
+  const all = Array.from({ length: nStr() }, (_, i) => i);
   let list = scan(all.filter((s) => st.frets[s] == null));
   if (!list.length) {
     const counts = {};
@@ -465,7 +469,7 @@ function renderFinder() {
   });
 
   // arpeggio: tones ascending from the root, octave root on top
-  const rootMidi = 48 + rootPc; // C3-based
+  const rootMidi = INSTRUMENT.arpBase + rootPc;
   const arp = formula.ints.map(([s]) => spellAtMidi(rootMidi + s, spellByPc.get(mod12(rootPc + s))));
   arp.push(spellAtMidi(rootMidi + 12, spellByPc.get(rootPc)));
   drawStaffNotes(staffSvg, arp, { labels: true });
@@ -575,6 +579,24 @@ CHORD_FORMULAS.forEach((f, i) => {
 });
 $('chordroot').addEventListener('change', (e) => { st.finderRoot = parseInt(e.target.value, 10); render(); });
 $('chordtype').addEventListener('change', (e) => { st.finderType = parseInt(e.target.value, 10); render(); });
+
+// chord modes are guitar-only; bass is a single-note instrument
+if (!INSTRUMENT.chords) {
+  for (const m of ['chord', 'finder']) {
+    document.querySelector(`#modes button[data-mode="${m}"]`).style.display = 'none';
+    delete RENDERERS[m];
+  }
+  document.querySelector('h1').textContent += ' — bass';
+  document.title += ' — bass';
+}
+
+const instSel = $('instrumentsel');
+instSel.value = INSTRUMENT === INSTRUMENTS.bass ? 'bass' : 'guitar';
+instSel.addEventListener('change', (e) => {
+  const u = new URL(location);
+  u.searchParams.set('inst', e.target.value);
+  location.href = u; // reload with fresh per-instrument state
+});
 
 const hash = location.hash.slice(1);
 if (RENDERERS[hash]) mode = hash;
