@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>embed demo — write lessons in plain HTML</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="tutorial">
+  <h1>embed demo</h1>
+  <p class="lede">Write prose, drop <code>&lt;svg data-draw&gt;</code> tags between
+    paragraphs. No JavaScript per figure — view source.</p>
+
+  <section>
+    <p>A major 2nd is two half steps — two frets. Here it is on the ruler, on
+      the staff, and everywhere on the neck from G2:</p>
+
+    <svg data-draw="ruler" data-marks="0:G 2:A" class="small"></svg>
+    <svg data-draw="staff" data-notes="G2 A2" class="small"></svg>
+    <svg data-draw="fretboard" data-interval="G2 M2 up" class="fb"></svg>
+
+    <p>Chords work the same way — name one and the formula draws itself:</p>
+
+    <svg data-draw="ruler" data-chord="Cm" class="small"></svg>
+    <svg data-draw="diagram" data-frets="x31013" data-root="C" data-label="Cm" class="diagram"></svg>
+
+    <p>Keys, scales, single notes, the pitch chart — and any figure can be
+      rendered for bass with <code>data-inst="bass"</code>:</p>
+
+    <svg data-draw="circle" data-key="G" class="small"></svg>
+    <svg data-draw="fretboard" data-scale="G major" class="fb"></svg>
+    <svg data-draw="chart" data-note="B"></svg>
+    <svg data-draw="fretboard" data-scale="E minor" data-inst="bass" class="fb"></svg>
+  </section>
+</main>
+<script src="core.js"></script>
+<script src="embed.js"></script>
+</body>
+</html>
