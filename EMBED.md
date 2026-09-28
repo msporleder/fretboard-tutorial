@@ -24,7 +24,7 @@ One of:
 |---|---|---|
 | `data-names` | `data-names` | every note name on the neck |
 | `data-note` | `data-note="B"` | one pitch class everywhere, colored by octave |
-| `data-scale` | `data-scale="E minor"` | a key's scale, roots colored by octave |
+| `data-scale` | `data-scale="E minor"` | a key's scale, roots colored by octave; add bare `data-degrees` to label by scale degree instead of note name |
 | `data-interval` | `data-interval="G2 M3 up"` | a root (solid) and every target (hollow, octave-colored) |
 | `data-chord` | `data-chord="x32010"` | a fingering, root markers in accent |
 

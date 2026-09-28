@@ -98,7 +98,7 @@ const EMBED_DRAWERS = {
       const { root, steps } = parseKey(d.scale);
       const scale = scaleFrom(root, steps);
       const spellByPc = new Map(scale.slice(0, 7).map((n) => [mod12(spelledToMidi(n)), n]));
-      opts.markers = markersForPcs(spellByPc, mod12(spelledToMidi(root)));
+      opts.markers = markersForPcs(spellByPc, mod12(spelledToMidi(root)), 'degrees' in d ? 'degrees' : 'names');
     } else if (d.note != null) {
       const pc = pcOf(d.note);
       const color = octaveColorFor(pc);
@@ -160,7 +160,7 @@ const EMBED_DRAWERS = {
   },
 
   diagram(svg, d) {
-    svg.setAttribute('viewBox', svg.getAttribute('viewBox') ?? (d.label ? '0 0 94 96' : '0 0 94 82'));
+    svg.setAttribute('viewBox', svg.getAttribute('viewBox') ?? (d.label ? '0 0 94 110' : '0 0 94 82'));
     drawChordDiagram(svg, parseFrets(d.frets), {
       rootPc: d.root != null ? pcOf(d.root) : null,
       label: d.label,

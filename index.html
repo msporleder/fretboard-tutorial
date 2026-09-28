@@ -25,10 +25,13 @@
   <div id="controls">
     <label class="ctl" id="ctl-notes"><input type="checkbox" id="shownames" checked> show note names</label>
     <span class="ctl" id="ctl-circle" hidden>
-      <button id="dirbtn">view in 4ths</button>
       <select id="circleshow">
         <option value="scale" selected>scale</option>
         <option value="arp">tonic arpeggio</option>
+      </select>
+      <select id="circlelabels">
+        <option value="names" selected>note names</option>
+        <option value="degrees">degrees</option>
       </select>
     </span>
     <span class="ctl" id="ctl-intervals" hidden>

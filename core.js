@@ -285,7 +285,7 @@ function drawChordDiagram(svg, frets, opts = {}) {
   const n = frets.length;
   if (opts.label) {
     svg.appendChild(txt({
-      x: x0 + ((n - 1) / 2) * dx, y: y0 + rows * dy + 14, 'font-size': 9.5, fill: MUTED,
+      x: x0 + ((n - 1) / 2) * dx, y: y0 + rows * dy + 15, 'font-size': 11, fill: MUTED,
       'font-style': 'italic', 'text-anchor': 'middle',
     }, opts.label));
   }
@@ -299,22 +299,22 @@ function drawChordDiagram(svg, frets, opts = {}) {
     svg.appendChild(el('line', { x1: x0, y1: y0 + r * dy, x2: x0 + (n - 1) * dx, y2: y0 + r * dy, stroke: INK, 'stroke-width': w }));
   }
   if (start > 1) {
-    svg.appendChild(txt({ x: x0 - 5, y: y0 + dy * 0.5 + 3, 'font-size': 9, fill: MUTED, 'text-anchor': 'end' }, start + 'fr'));
+    svg.appendChild(txt({ x: x0 - 5, y: y0 + dy * 0.5 + 3, 'font-size': 10, fill: MUTED, 'text-anchor': 'end' }, start + 'fr'));
   }
 
   for (let s = 0; s < n; s++) {
     const x = x0 + (n - 1 - s) * dx;
     const fs = perString[s];
     if (fs == null) {
-      svg.appendChild(txt({ x, y: y0 - 5, 'font-size': 9, fill: MUTED, 'text-anchor': 'middle' }, '×'));
+      svg.appendChild(txt({ x, y: y0 - 4.5, 'font-size': 10, fill: MUTED, 'text-anchor': 'middle' }, '×'));
       continue;
     }
     for (const f of fs) {
       const color = rootColor(fretMidi(s, f)) ?? INK;
       if (f === 0) {
-        svg.appendChild(el('circle', { cx: x, cy: y0 - 8, r: 3, fill: 'none', stroke: color, 'stroke-width': 1.2 }));
+        svg.appendChild(el('circle', { cx: x, cy: y0 - 8, r: 3.4, fill: 'none', stroke: color, 'stroke-width': 1.3 }));
       } else {
-        svg.appendChild(el('circle', { cx: x, cy: y0 + (f - start + 0.5) * dy, r: 4.2, fill: color }));
+        svg.appendChild(el('circle', { cx: x, cy: y0 + (f - start + 0.5) * dy, r: 4.5, fill: color }));
       }
     }
   }
@@ -441,7 +441,7 @@ function drawFretboard(svg, opts = {}) {
         // sharp-side names for the small labels (F♯ not G♭)
         const name = natural ? LETTERS[PC_SPELL[pc][0]] : LETTERS[PC_SPELL[mod12(pc - 1)][0]] + '♯';
         svg.appendChild(txt({
-          x: noteX(f), y: stringY(s) + 3.5, 'font-size': natural ? 10 : 8.5,
+          x: noteX(f), y: stringY(s) + 3.5, 'font-size': natural ? 10.5 : 9,
           fill: natural ? '#5a564c' : '#a8a396', 'text-anchor': 'middle',
         }, name));
       }
@@ -490,15 +490,20 @@ function octaveColorFor(pc) {
 }
 
 // markers for every fretboard position of a set of pitch classes.
-// spellByPc: Map pc -> {letter, acc}; rootPc colored by octave
-function markersForPcs(spellByPc, rootPc) {
+// spellByPc: Map pc -> {letter, acc}; rootPc colored by octave.
+// labels: 'names' (sci, default) or 'degrees' (ruler vocabulary: R ♭3 5 …)
+function markersForPcs(spellByPc, rootPc, labels = 'names') {
   const rootColor = octaveColorFor(rootPc);
   const out = [];
   for (let s = 0; s < nStr(); s++) {
     for (let f = 0; f <= NUM_FRETS; f++) {
       const midi = fretMidi(s, f);
       const spell = spellByPc.get(mod12(midi));
-      if (spell) out.push({ s, f, label: sciName(spellAtMidi(midi, spell)), fill: rootColor(midi) ?? INK });
+      if (!spell) continue;
+      const label = labels === 'degrees'
+        ? DEGREE_LABELS[mod12(midi - rootPc)]
+        : sciName(spellAtMidi(midi, spell));
+      out.push({ s, f, label, fill: rootColor(midi) ?? INK });
     }
   }
   return out;
@@ -535,13 +540,21 @@ function drawCircle(svg, opts = {}) {
     svg.appendChild(mg);
   }
 
-  svg.appendChild(txt({ x: cx, y: cy - 4, 'font-size': 12, fill: MUTED, 'text-anchor': 'middle' }, 'clockwise ↻'));
-  svg.appendChild(txt({ x: cx, y: cy + 14, 'font-size': 12, fill: MUTED, 'text-anchor': 'middle' }, opts.fourths ? 'in 4ths' : 'in 5ths'));
+  // center label doubles as the 4ths/5ths toggle when onToggle is given
+  const center = el('g', { class: opts.onToggle ? 'toggle' : '' });
+  center.appendChild(el('circle', { cx, cy, r: 44, fill: 'transparent' }));
+  center.appendChild(txt({ x: cx, y: cy - 4, 'font-size': 12, fill: MUTED, 'text-anchor': 'middle' }, 'clockwise ↻'));
+  center.appendChild(txt({ x: cx, y: cy + 14, 'font-size': 12, fill: MUTED, 'text-anchor': 'middle' }, opts.fourths ? 'in 4ths' : 'in 5ths'));
+  if (opts.onToggle) {
+    center.appendChild(txt({ x: cx, y: cy + 30, 'font-size': 9, fill: MUTED, 'font-style': 'italic', 'text-anchor': 'middle' }, opts.fourths ? 'flip to 5ths' : 'flip to 4ths'));
+  }
+  svg.appendChild(center);
 
-  if (opts.onClick) {
+  if (opts.onClick || opts.onToggle) {
     svg.onclick = (ev) => {
+      if (ev.target.closest('.toggle')) { opts.onToggle?.(); return; }
       const g = ev.target.closest('.key');
-      if (g) opts.onClick(+g.dataset.k, g.dataset.minor === '1');
+      if (g && opts.onClick) opts.onClick(+g.dataset.k, g.dataset.minor === '1');
     };
   }
 }
@@ -705,7 +718,7 @@ function drawPitchChart(svg, opts = {}) {
 
     // header name; octave digit shown on naturals to keep columns narrow
     svg.appendChild(txt({
-      x: xm, y: 12, 'font-size': natural ? 9 : 7.5,
+      x: xm, y: 12, 'font-size': natural ? 9.5 : 8,
       fill: hl ?? (natural ? '#5a564c' : '#a8a396'), 'text-anchor': 'middle',
     }, natural ? spelledName(sp) + sp.octave : spelledName(sp)));
 
@@ -727,7 +740,7 @@ function drawPitchChart(svg, opts = {}) {
     for (let s = 0; s < n; s++) {
       const f = midi - STRING_MIDI[s];
       if (f < 0 || f > NUM_FRETS) continue;
-      svg.appendChild(txt({ x: xm, y: rowY(s) + 4, 'font-size': 9, fill: color, 'text-anchor': 'middle' }, String(f)));
+      svg.appendChild(txt({ x: xm, y: rowY(s) + 4, 'font-size': 9.5, fill: color, 'text-anchor': 'middle' }, String(f)));
     }
   }
 
@@ -808,6 +821,54 @@ function positionBoxes(rootPc, pcs, shapes = CAGED_SHAPES) {
   }
   return cagedShapes(rootPc, shapes).map((sh) =>
     boxAt(sh.name, Math.max(0, Math.min(...sh.frets.filter((f) => f != null)) - 1), pcs));
+}
+
+// three-note voicings of a triad on the given string sets, named by
+// inversion; ranked low-position first, root position slightly preferred
+function triadVoicings(rootPc, formula, sets) {
+  if (formula.ints.length !== 3) return [];
+  const pcSet = new Set(formula.ints.map(([s]) => mod12(rootPc + s)));
+  const degOf = new Map(formula.ints.map(([s, d]) => [mod12(rootPc + s), d]));
+  const out = [];
+  for (const set of sets) {
+    const cands = set.map((s) => {
+      const c = [];
+      for (let f = 0; f <= NUM_FRETS; f++) if (pcSet.has(mod12(fretMidi(s, f)))) c.push(f);
+      return c;
+    });
+    for (const f0 of cands[0]) for (const f1 of cands[1]) for (const f2 of cands[2]) {
+      const midis = [fretMidi(set[0], f0), fretMidi(set[1], f1), fretMidi(set[2], f2)];
+      if (new Set(midis.map(mod12)).size !== 3) continue;
+      const fr = [f0, f1, f2].filter((f) => f > 0);
+      const span = fr.length ? Math.max(...fr) - Math.min(...fr) : 0;
+      if (span > 4) continue;
+      const frets = new Array(nStr()).fill(null);
+      [f0, f1, f2].forEach((f, i) => { frets[set[i]] = f; });
+      const bassDeg = degOf.get(mod12(Math.min(...midis)));
+      out.push({
+        name: bassDeg === 1 ? 'root position' : `${DEGREE_NAMES[bassDeg]} in bass`,
+        frets,
+        score: (fr.length ? Math.min(...fr) : 0) * 10 + span + (bassDeg === 1 ? 0 : 3),
+      });
+    }
+  }
+  return out.sort((x, y) => x.score - y.score);
+}
+
+// close-position triads on three adjacent strings — the easy portable
+// inversion shapes
+function closedTriads(rootPc, formula) {
+  const sets = [];
+  for (let a = 0; a + 2 < nStr(); a++) sets.push([a, a + 1, a + 2]);
+  return triadVoicings(rootPc, formula, sets);
+}
+
+// spread (open-position) triads: one interior string skipped — a closed
+// triad opened up for fingerstyle, the thumb takes the gap
+function spreadTriads(rootPc, formula) {
+  const sets = [];
+  for (let a = 0; a + 3 < nStr(); a++) sets.push([a, a + 1, a + 3], [a, a + 2, a + 3]);
+  return triadVoicings(rootPc, formula, sets);
 }
 
 // dim7 is symmetric (stacked minor 3rds): one grip, D-string bass, and the

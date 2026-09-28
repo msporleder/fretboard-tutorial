@@ -86,7 +86,7 @@ select {
   height: auto;
 }
 
-#fretboard .cell, #circle .key { cursor: pointer; }
+#fretboard .cell, #circle .key, #circle .toggle { cursor: pointer; }
 
 #circlewrap svg {
   width: min(340px, 90vw);
@@ -134,8 +134,8 @@ select {
   margin: 0.75rem 0;
 }
 
-#voicings .diagram, .tutorial .diagram {
-  width: 86px;
+#voicings .diagram, .tutorial .diagram, .diagram {
+  width: 98px;
   height: auto;
 }
 

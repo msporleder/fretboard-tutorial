@@ -54,7 +54,6 @@ assert(diatonicToY(30) === STAFF_BOT_Y, "bottom line y");
 // semitone names
 assert(semitoneName(4) === "major 3rd" && semitoneName(16) === "major 3rd + octave", "semitone names");
 
-console.log(process.exitCode ? "TESTS FAILED" : "all tests passed");
 // scientific notation
 assert(sciName(midiToSpelled(40)) === "E2" && sciName(midiToSpelled(64)) === "E4", "sci names");
 assert(sciName(spellAtMidi(46, { letter: 6, acc: -1 })) === "B♭2", "sci with flat");
@@ -177,3 +176,37 @@ assert(octaveColorFor(4)(28) === OCTAVE_COLORS[0] && octaveColorFor(4)(40) === O
   assert(vE5.some((v) => v.frets.every((f, i) => f === [null, 2, 2, 0][i])), "bass E5 shape");
 }
 setInstrument('guitar');
+// spread triads: three strings, exactly one interior skip, all tones, span<=4
+{
+  const spreads = spreadTriads(0, CHORD_FORMULAS[0]);
+  assert(spreads.length > 0, "spreads exist");
+  for (const v of spreads) {
+    const sounded = [];
+    v.frets.forEach((f, s) => { if (f != null) sounded.push(s); });
+    assert(sounded.length === 3 && sounded[2] - sounded[0] === 3, "one skip: " + v.frets);
+    const pcs = new Set(sounded.map((s) => mod12(fretMidi(s, v.frets[s]))));
+    assert(pcs.has(0) && pcs.has(4) && pcs.has(7), "spread tones: " + v.frets);
+    const fr = sounded.map((s) => v.frets[s]).filter((f) => f > 0);
+    if (fr.length) assert(Math.max(...fr) - Math.min(...fr) <= 4, "spread span: " + v.frets);
+  }
+  const names = new Set(spreads.map((v) => v.name));
+  assert([...names].every((x) => x === "root position" || x === "3rd in bass" || x === "5th in bass"), "spread names: " + [...names]);
+  // 4-note chords get none
+  assert(spreadTriads(0, CHORD_FORMULAS.find((f) => f.sym === '7')).length === 0, "no spreads for 7ths");
+}
+
+console.log(process.exitCode ? "TESTS FAILED" : "all tests passed");
+// closed triads: three adjacent strings, all tones
+{
+  const closed = closedTriads(0, CHORD_FORMULAS[0]);
+  assert(closed.length > 0, "closed triads exist");
+  for (const v of closed) {
+    const sounded = [];
+    v.frets.forEach((f, s) => { if (f != null) sounded.push(s); });
+    assert(sounded.length === 3 && sounded[2] - sounded[0] === 2, "adjacent: " + v.frets);
+    const pcs = new Set(sounded.map((s) => mod12(fretMidi(s, v.frets[s]))));
+    assert(pcs.size === 3, "closed tones: " + v.frets);
+  }
+  // the classic G-B-e set C major root position: C4 E4 G4 = frets 3,5,5
+  assert(closed.some((v) => v.frets.every((f, i) => f === [3, 5, 5, null, null, null][i])), "classic close C found");
+}

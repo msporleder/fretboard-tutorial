@@ -18,6 +18,7 @@ const st = {
   showNames: true, selPc: null,             // notes mode
   keyIdx: 0, fourths: false, minor: false,  // circle mode
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
+  circleLabels: 'names',                    // circle mode: names|degrees
   root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
   frets: new Array(nStr()).fill(null),         // chord mode: fret per string, null = muted
   placing: null,                               // chord mode: pc awaiting a position choice
@@ -70,7 +71,7 @@ function renderNotes() {
     for (let midi = low + mod12(st.selPc - low); midi <= STRING_MIDI[0] + NUM_FRETS; midi += 12) {
       legend.push(`<b style="color:${octaveColor(midi)}">${sciName(midiToSpelled(midi))}</b>`);
     }
-    infoEl.innerHTML = `${legend.join(' · ')} — every place it lives on the neck, one color per octave`;
+    infoEl.innerHTML = `${legend.join(' · ')} — one color per octave`;
   }
 
   drawPitchChart($('pitchchart'), {
@@ -92,6 +93,7 @@ function renderCircle() {
     selected: st.minor ? null : st.keyIdx,
     minorSelected: st.minor ? st.keyIdx : null,
     onClick: (k, isMinor) => { st.keyIdx = k; st.minor = isMinor; st.circlePos = null; render(); },
+    onToggle: () => { st.fourths = !st.fourths; render(); },
   });
 
   // minor key root = 6th degree of the relative major, kept in staff range
@@ -112,7 +114,7 @@ function renderCircle() {
 
   // big fretboard: everything, or one numbered position box
   if (st.circlePos == null) {
-    drawFretboard(fbSvg, { markers: markersForPcs(spellByPc, rootPc) });
+    drawFretboard(fbSvg, { markers: markersForPcs(spellByPc, rootPc, st.circleLabels) });
   } else {
     const box = boxes[st.circlePos];
     const notes = [];
@@ -147,7 +149,7 @@ function renderCircle() {
   vbox.innerHTML = '';
   const lbl = document.createElement('div');
   lbl.className = 'vlabel';
-  lbl.textContent = `${arp ? 'arpeggio' : 'scale'} positions — click one to number it on the neck`;
+  lbl.textContent = `${arp ? 'arpeggio' : 'scale'} positions`;
   vbox.appendChild(lbl);
   boxes.forEach((b, i) => {
     const svg = el('svg', { viewBox: '0 0 94 110', class: 'diagram' + (i === st.circlePos ? ' sel' : '') });
@@ -482,7 +484,7 @@ function renderFinder() {
   const box = $('voicings');
   box.innerHTML = '';
   const addDiagram = (frets, label) => {
-    const svg = el('svg', { viewBox: label ? '0 0 94 96' : '0 0 94 82', class: 'diagram' });
+    const svg = el('svg', { viewBox: label ? '0 0 94 110' : '0 0 94 82', class: 'diagram' });
     drawChordDiagram(svg, frets, { rootPc, label });
     if (frets.every((f) => f == null || f <= NUM_FRETS)) {
       svg.addEventListener('click', () => {
@@ -495,17 +497,26 @@ function renderFinder() {
     box.appendChild(svg);
   };
 
-  const shapeRow =
-    formula.sym === '' ? { label: 'CAGED — the five shapes up the neck', shapes: cagedShapes(rootPc) }
-    : formula.sym === 'm' ? { label: 'CAGED minor — the five shapes with the 3rd flattened', shapes: cagedShapes(rootPc, CAGED_MINOR_SHAPES) }
-    : formula.sym === 'dim7' ? { label: 'dim7 is symmetric — one shape, every three frets, each an inversion', shapes: dim7Positions(rootPc) }
-    : null;
-  if (shapeRow) {
+  const shapeRows = [];
+  if (formula.sym === '') shapeRows.push({ label: 'CAGED', shapes: cagedShapes(rootPc) });
+  if (formula.sym === 'm') shapeRows.push({ label: 'CAGED minor', shapes: cagedShapes(rootPc, CAGED_MINOR_SHAPES) });
+  if (formula.sym === 'dim7') shapeRows.push({ label: 'dim7 — one shape, every three frets', shapes: dim7Positions(rootPc) });
+  const closed = closedTriads(rootPc, formula);
+  if (closed.length) {
+    shapeRows.push({ label: 'closed triads', shapes: closed.slice(0, 8) });
+  }
+  const spreads = spreadTriads(rootPc, formula);
+  if (spreads.length) {
+    shapeRows.push({ label: 'spread triads', shapes: spreads.slice(0, 8) });
+  }
+  for (const row of shapeRows) {
     const lbl = document.createElement('div');
     lbl.className = 'vlabel';
-    lbl.textContent = shapeRow.label;
+    lbl.textContent = row.label;
     box.appendChild(lbl);
-    for (const sh of shapeRow.shapes) addDiagram(sh.frets, sh.name);
+    for (const sh of row.shapes) addDiagram(sh.frets, sh.name);
+  }
+  if (shapeRows.length) {
     const lbl2 = document.createElement('div');
     lbl2.className = 'vlabel';
     lbl2.textContent = 'fingerings';
@@ -546,13 +557,8 @@ for (const btn of document.querySelectorAll('#modes button')) {
 
 $('shownames').addEventListener('change', (e) => { st.showNames = e.target.checked; render(); });
 
-$('dirbtn').addEventListener('click', () => {
-  st.fourths = !st.fourths;
-  $('dirbtn').textContent = st.fourths ? 'view in 5ths' : 'view in 4ths';
-  render();
-});
-
 $('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
+$('circlelabels').addEventListener('change', (e) => { st.circleLabels = e.target.value; render(); });
 
 $('degree').addEventListener('change', (e) => {
   st.degree = parseInt(e.target.value, 10);
