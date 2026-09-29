@@ -6,7 +6,7 @@
 // OCTAVE_COLORS: one color per octave of a selected pitch class, lowest first
 let INK = '#1a1a1a';
 let ACCENT = '#b0413e';
-let MUTED = '#8a867c';
+let MUTED = '#6e6a5e';
 let PAPER = '#faf8f2';
 let OCTAVE_COLORS = ['#b0413e', '#4a6fa5', '#2e7d32', '#a8742c'];
 
@@ -241,6 +241,8 @@ function voicings(rootPc, formula) {
 // positions shaded, current tones marked. Root mark in accent.
 
 const DEGREE_LABELS = ['R', '♭2', '2', '♭3', '3', '4', '♭5', '5', '♭6', '6', '♭7', '7', 'R'];
+// on the ruler header, extensions share their in-octave slot: a 9th is a 2nd, up one
+const RULER_LABELS = ['R', '♭2', '2/9', '♭3', '3', '4/11', '♭5', '5', '♭6', '6/13', '♭7', '7', 'R'];
 const DIATONIC_SEMIS = new Set([0, 2, 4, 5, 7, 9, 11, 12]);
 
 // marks: [{semis: 0..12, label}]; opts.onClick(semis) makes the slots clickable
@@ -251,10 +253,22 @@ function drawDegreeRuler(svg, marks, opts = {}) {
     const x = x0 + i * cw;
     const dia = DIATONIC_SEMIS.has(i);
     svg.appendChild(el('rect', { x, y: y0, width: cw, height: h, fill: dia ? '#eee9dd' : 'none', stroke: '#c9c4b6', 'stroke-width': 0.8 }));
-    svg.appendChild(txt({
-      x: x + cw / 2, y: y0 - 6, 'font-size': dia ? 11 : 8.5,
+    const label = RULER_LABELS[i];
+    const t = txt({
+      x: x + cw / 2, y: y0 - 6, 'font-size': dia ? 11 : 9.5,
       fill: dia ? INK : MUTED, 'text-anchor': 'middle',
-    }, DEGREE_LABELS[i]));
+    }, '');
+    if (label.includes('/')) { // extension shares the slot, in the lighter color
+      const [main, ext] = label.split('/');
+      const tm = el('tspan', {});
+      tm.textContent = main;
+      const te = el('tspan', { fill: MUTED, 'font-size': 9 });
+      te.textContent = '/' + ext;
+      t.append(tm, te);
+    } else {
+      t.textContent = label;
+    }
+    svg.appendChild(t);
   }
   for (const m of marks) {
     const x = x0 + m.semis * cw + cw / 2;
@@ -352,26 +366,24 @@ const INSTRUMENTS = {
   guitar: {
     strings: [64, 59, 55, 50, 45, 40], labels: ['e', 'B', 'G', 'D', 'A', 'E'],
     clef: 'treble', staffBotDia: 30,   // bottom staff line: written E4
-    staffClick: [23, 44],              // clickable written range on the staff
     chart: [40, 76],                   // pitch chart, sounding E2..E5
     scaleOctave: 3, rootMax: 57,       // circle-mode register
     arpBase: 48,                       // finder arpeggio root (C3)
     chords: true,                      // chord builder/finder + CAGED live here
     palette: {
-      ink: '#1a1a1a', paper: '#faf8f2', accent: '#b0413e', muted: '#8a867c',
+      ink: '#1a1a1a', paper: '#faf8f2', accent: '#b0413e', muted: '#6e6a5e',
       octaves: ['#b0413e', '#4a6fa5', '#2e7d32', '#a8742c'],
     },
   },
   bass: {
     strings: [43, 38, 33, 28], labels: ['G', 'D', 'A', 'E'],
     clef: 'bass', staffBotDia: 18,     // bottom staff line: written G2
-    staffClick: [16, 34],
     chart: [28, 55],                   // sounding E1..G3
     scaleOctave: 2, rootMax: 40, // keep circle-mode roots low: E1..E2
     arpBase: 36,                       // C2
     chords: false,                     // single-note instrument; CAGED is six-string
     palette: { // late-night set: indigo, brass, wine, olive on aged cream
-      ink: '#221e19', paper: '#f7f1e3', accent: '#3a5683', muted: '#8d8471',
+      ink: '#221e19', paper: '#f7f1e3', accent: '#3a5683', muted: '#6f6957',
       octaves: ['#3a5683', '#a4742a', '#7c4a63', '#556b3f'],
     },
   },
@@ -445,7 +457,8 @@ function drawFretboard(svg, opts = {}) {
     svg.appendChild(txt({ x: noteX(f), y: yBot + 26, 'font-size': 11, fill: MUTED, 'text-anchor': 'middle' }, String(f)));
   }
 
-  // every note name, small (opts.spell: 'sharp' default, or 'flat')
+  // every note name, small (opts.spell: 'sharp' default, or 'flat');
+  // a paper halo keeps the string line from striking through the letters
   if (opts.names) {
     for (let s = 0; s < n; s++) {
       for (let f = 0; f <= NUM_FRETS; f++) {
@@ -453,7 +466,8 @@ function drawFretboard(svg, opts = {}) {
         const natural = sp.acc === 0;
         svg.appendChild(txt({
           x: noteX(f), y: stringY(s) + 3.5, 'font-size': natural ? 10.5 : 9,
-          fill: natural ? '#5a564c' : '#a8a396', 'text-anchor': 'middle',
+          fill: natural ? '#5a564c' : '#8f8a7c', 'text-anchor': 'middle',
+          stroke: PAPER, 'stroke-width': 3, 'paint-order': 'stroke',
         }, spelledName(sp)));
       }
     }
@@ -463,9 +477,9 @@ function drawFretboard(svg, opts = {}) {
   for (const m of opts.markers ?? []) {
     const x = noteX(m.f), y = stringY(m.s);
     const fill = m.fill ?? INK;
-    const size = (m.label ?? '').length > 2 ? 7.5 : 9.5;
-    if (m.dot) { // small unlabeled dot, for faint context maps
-      svg.appendChild(el('circle', { cx: x, cy: y, r: 3.6, fill }));
+    const size = (m.label ?? '').length > 2 ? 8 : 9.5;
+    if (m.dot) { // small unlabeled ring, for faint context maps (vs solid inlays)
+      svg.appendChild(el('circle', { cx: x, cy: y, r: 3.8, fill: 'none', stroke: fill, 'stroke-width': 1.4 }));
     } else if (m.hollow) {
       svg.appendChild(el('circle', { cx: x, cy: y, r: 10, fill: PAPER, stroke: fill, 'stroke-width': 2 }));
       if (m.label) svg.appendChild(txt({ x, y: y + 3, 'font-size': size, fill, 'text-anchor': 'middle', 'font-weight': 'bold' }, m.label));
@@ -545,9 +559,9 @@ function drawCircle(svg, opts = {}) {
     const mx = cx + rMin * Math.cos(a), my = cy + rMin * Math.sin(a);
     const msel = opts.minorSelected === k;
     const mg = el('g', { 'data-k': k, 'data-minor': '1', class: opts.onClick ? 'key' : '' });
-    mg.appendChild(el('circle', { cx: mx, cy: my, r: 13.5, fill: msel ? ACCENT : 'transparent' }));
+    mg.appendChild(el('circle', { cx: mx, cy: my, r: 15, fill: msel ? ACCENT : 'transparent' }));
     mg.appendChild(txt({
-      x: mx, y: my + 4, 'font-size': 11, fill: msel ? PAPER : MUTED,
+      x: mx, y: my + 4.5, 'font-size': 12, fill: msel ? PAPER : MUTED,
       'text-anchor': 'middle', 'font-style': 'italic',
     }, CIRCLE_MINORS[k]));
     svg.appendChild(mg);
@@ -599,7 +613,7 @@ function drawStaffBase(svg) {
   // already shifts written pitch up)
   for (let dia = STAFF_BOT_DIA; dia <= STAFF_BOT_DIA + 8; dia += 2) {
     svg.appendChild(txt({
-      x: 16, y: diatonicToY(dia) + 2.5, 'font-size': 8, fill: MUTED,
+      x: 16, y: diatonicToY(dia) + 2.5, 'font-size': 8.5, fill: MUTED,
       'font-style': 'italic', 'text-anchor': 'middle',
     }, LETTERS[dia % 7] + (Math.floor(dia / 7) - 1)));
   }
@@ -613,7 +627,7 @@ function staffGlyph(svg, note, x, color, opts = {}) {
   const ledger = (d) => {
     svg.appendChild(el('line', { x1: headX - 13, y1: diatonicToY(d), x2: headX + 13, y2: diatonicToY(d), stroke: color, 'stroke-width': 1 }));
     svg.appendChild(txt({
-      x: headX + 17, y: diatonicToY(d) + 2.5, 'font-size': 7, fill: MUTED, 'font-style': 'italic',
+      x: headX + 17, y: diatonicToY(d) + 2.5, 'font-size': 7.5, fill: MUTED, 'font-style': 'italic',
     }, LETTERS[d % 7] + (Math.floor(d / 7) - 1)));
   };
   for (let d = STAFF_BOT_DIA - 2; d >= dia; d -= 2) ledger(d);
@@ -639,9 +653,22 @@ function staffGlyph(svg, note, x, color, opts = {}) {
 
 // notes: spelled notes at sounding octave; shifted to written pitch here.
 // opts: { chord: stack at one x, labels: note names underneath, colors: [] }
+// The viewBox hugs the drawn content so mid-range staves don't float in space.
 function drawStaffNotes(svg, notes, opts = {}) {
   drawStaffBase(svg);
   const written = notes.map((n) => ({ ...n, octave: n.octave + 1 }));
+
+  // vertical extent: staff + clef (the treble clef hangs well past the lines)
+  let top = STAFF.topY - (INSTRUMENT.clef === 'treble' ? 28 : 12);
+  let bot = STAFF_BOT_Y + 38; // clef tail and the little 8
+  const reach = (dia, stems) => {
+    const y = diatonicToY(dia);
+    const up = stems && dia < STAFF_BOT_DIA + 4;
+    const down = stems && dia >= STAFF_BOT_DIA + 4;
+    top = Math.min(top, y - (up ? 42 : 12));
+    bot = Math.max(bot, y + (down ? 42 : 12));
+  };
+  written.forEach((n) => reach(n.octave * 7 + n.letter, !opts.chord));
 
   if (opts.chord) {
     const x = STAFF.x + STAFF.w * 0.6;
@@ -657,31 +684,20 @@ function drawStaffNotes(svg, notes, opts = {}) {
     const n = written.length;
     const x0 = STAFF.x + 70, x1 = STAFF.x + STAFF.w - 16;
     const dx = n > 1 ? Math.min(44, (x1 - x0) / (n - 1)) : 0;
+    const labelY = bot + 14;
     written.forEach((note, i) => {
       const x = x0 + dx * i;
       const color = opts.colors?.[i] ?? INK;
       staffGlyph(svg, note, x, color);
       if (opts.labels) {
         // label with the sounding octave, not the written one
-        svg.appendChild(txt({ x, y: 235, 'font-size': 13, fill: color, 'text-anchor': 'middle' }, sciName(notes[i])));
+        svg.appendChild(txt({ x, y: labelY, 'font-size': 13, fill: color, 'text-anchor': 'middle' }, sciName(notes[i])));
       }
     });
+    if (opts.labels && n > 0) bot = labelY + 5;
   }
 
-  // clickable rows, one per line/space, over the instrument's written range
-  if (opts.onClick) {
-    const [clickLo, clickHi] = INSTRUMENT.staffClick;
-    for (let dia = clickLo; dia <= clickHi; dia++) {
-      svg.appendChild(el('rect', {
-        x: STAFF.x + 40, y: diatonicToY(dia) - 3, width: STAFF.w - 40, height: 6,
-        fill: 'transparent', class: 'cell', 'data-dia': dia,
-      }));
-    }
-    svg.onclick = (ev) => {
-      const c = ev.target.closest('.cell');
-      if (c) opts.onClick(+c.dataset.dia, ev);
-    };
-  }
+  svg.setAttribute('viewBox', `0 ${top} 360 ${bot - top}`);
 }
 
 // ---------- pitch chart (method-book style) ----------
@@ -734,7 +750,7 @@ function drawPitchChart(svg, opts = {}) {
     // header name; octave digit shown on naturals to keep columns narrow
     svg.appendChild(txt({
       x: xm, y: 12, 'font-size': natural ? 9.5 : 8,
-      fill: hl ?? (natural ? '#5a564c' : '#a8a396'), 'text-anchor': 'middle',
+      fill: hl ?? (natural ? '#5a564c' : '#8f8a7c'), 'text-anchor': 'middle',
     }, natural ? spelledName(sp) + sp.octave : spelledName(sp)));
 
     // notehead (written pitch), short ledgers, tiny accidental

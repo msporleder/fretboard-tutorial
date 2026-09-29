@@ -2,7 +2,7 @@
   --ink: #1a1a1a;
   --paper: #faf8f2;
   --accent: #b0413e;
-  --muted: #8a867c;
+  --muted: #6e6a5e;
 }
 
 * { box-sizing: border-box; }
@@ -108,7 +108,7 @@ select {
 }
 
 #hint {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--muted);
   font-style: italic;
   min-height: 1.2em;
@@ -159,7 +159,7 @@ select {
   margin: 0.25rem auto;
 }
 
-#ruler .cell, #staff .cell, #pitchchart .cell { cursor: pointer; }
+#ruler .cell, #pitchchart .cell { cursor: pointer; }
 
 #pitchchart {
   display: block;
