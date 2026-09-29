@@ -210,3 +210,13 @@ console.log(process.exitCode ? "TESTS FAILED" : "all tests passed");
   // the classic G-B-e set C major root position: C4 E4 G4 = frets 3,5,5
   assert(closed.some((v) => v.frets.every((f, i) => f === [3, 5, 5, null, null, null][i])), "classic close C found");
 }
+// sharp/flat spelling preference
+assert(spelledName(pcSpelling(6, 'sharp')) === "F♯" && spelledName(pcSpelling(6, 'flat')) === "G♭", "pc6 pref");
+assert(spelledName(pcSpelling(1, 'sharp')) === "C♯" && spelledName(pcSpelling(1, 'flat')) === "D♭", "pc1 pref");
+assert(spelledName(pcSpelling(10)) === "A♯", "default is sharp");
+for (let pc = 0; pc < 12; pc++) {
+  for (const pref of ['sharp', 'flat']) {
+    const sp = pcSpelling(pc, pref);
+    assert(mod12(LETTER_PC[sp.letter] + sp.acc) === pc, `round trip ${pc} ${pref}`);
+  }
+}

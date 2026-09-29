@@ -72,7 +72,7 @@ function pcOf(noteName) {
 
 const EMBED_DRAWERS = {
   fretboard(svg, d) {
-    const opts = { names: 'names' in d };
+    const opts = { names: 'names' in d, spell: d.spell };
     if (d.interval != null) {
       const [rootName, ivl, dir] = d.interval.split(/\s+/);
       const root = parseSci(rootName);
@@ -125,7 +125,7 @@ const EMBED_DRAWERS = {
   },
 
   chart(svg, d) {
-    drawPitchChart(svg, { colorFor: d.note != null ? octaveColorFor(pcOf(d.note)) : null });
+    drawPitchChart(svg, { colorFor: d.note != null ? octaveColorFor(pcOf(d.note)) : null, spell: d.spell });
   },
 
   staff(svg, d) {

@@ -18,6 +18,19 @@ const PC_SPELL = [
   [0, 0], [1, -1], [1, 0], [2, -1], [2, 0], [3, 0],
   [3, 1], [4, 0], [5, -1], [5, 0], [6, -1], [6, 0],
 ];
+// all-sharp / all-flat variants for display preferences
+const PC_SPELL_SHARP = [
+  [0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [3, 0],
+  [3, 1], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0],
+];
+const PC_SPELL_FLAT = [
+  [0, 0], [1, -1], [1, 0], [2, -1], [2, 0], [3, 0],
+  [4, -1], [4, 0], [5, -1], [5, 0], [6, -1], [6, 0],
+];
+function pcSpelling(pc, pref) {
+  const [letter, acc] = (pref === 'flat' ? PC_SPELL_FLAT : PC_SPELL_SHARP)[mod12(pc)];
+  return { letter, acc };
+}
 
 const mod12 = (n) => ((n % 12) + 12) % 12;
 
@@ -432,18 +445,16 @@ function drawFretboard(svg, opts = {}) {
     svg.appendChild(txt({ x: noteX(f), y: yBot + 26, 'font-size': 11, fill: MUTED, 'text-anchor': 'middle' }, String(f)));
   }
 
-  // every note name, small (sharp-side default spelling)
+  // every note name, small (opts.spell: 'sharp' default, or 'flat')
   if (opts.names) {
     for (let s = 0; s < n; s++) {
       for (let f = 0; f <= NUM_FRETS; f++) {
-        const pc = mod12(fretMidi(s, f));
-        const natural = PC_SPELL[pc][1] === 0;
-        // sharp-side names for the small labels (F♯ not G♭)
-        const name = natural ? LETTERS[PC_SPELL[pc][0]] : LETTERS[PC_SPELL[mod12(pc - 1)][0]] + '♯';
+        const sp = pcSpelling(fretMidi(s, f), opts.spell);
+        const natural = sp.acc === 0;
         svg.appendChild(txt({
           x: noteX(f), y: stringY(s) + 3.5, 'font-size': natural ? 10.5 : 9,
           fill: natural ? '#5a564c' : '#a8a396', 'text-anchor': 'middle',
-        }, name));
+        }, spelledName(sp)));
       }
     }
   }
@@ -453,7 +464,9 @@ function drawFretboard(svg, opts = {}) {
     const x = noteX(m.f), y = stringY(m.s);
     const fill = m.fill ?? INK;
     const size = (m.label ?? '').length > 2 ? 7.5 : 9.5;
-    if (m.hollow) {
+    if (m.dot) { // small unlabeled dot, for faint context maps
+      svg.appendChild(el('circle', { cx: x, cy: y, r: 3.6, fill }));
+    } else if (m.hollow) {
       svg.appendChild(el('circle', { cx: x, cy: y, r: 10, fill: PAPER, stroke: fill, 'stroke-width': 2 }));
       if (m.label) svg.appendChild(txt({ x, y: y + 3, 'font-size': size, fill, 'text-anchor': 'middle', 'font-weight': 'bold' }, m.label));
     } else {
@@ -705,15 +718,17 @@ function drawPitchChart(svg, opts = {}) {
   }
   if (INSTRUMENT.clef === 'treble') {
     svg.appendChild(txt({ x: x0 - 40, y: yOfDia(STAFF_BOT_DIA) + 12, 'font-size': 46, 'font-family': 'serif' }, '\u{1D11E}'));
+    svg.appendChild(txt({ x: x0 - 33, y: yOfDia(STAFF_BOT_DIA) + 26, 'font-size': 8, 'font-family': 'serif', 'font-style': 'italic', 'text-anchor': 'middle' }, '8'));
   } else {
     svg.appendChild(txt({ x: x0 - 38, y: yOfDia(STAFF_BOT_DIA) + 1, 'font-size': 32, 'font-family': 'serif' }, '\u{1D122}'));
+    svg.appendChild(txt({ x: x0 - 30, y: yOfDia(STAFF_BOT_DIA) + 12, 'font-size': 8, 'font-family': 'serif', 'font-style': 'italic', 'text-anchor': 'middle' }, '8'));
   }
 
   for (let midi = LO; midi <= HI; midi++) {
     const hl = opts.colorFor?.(midi);
     const color = hl ?? INK;
     const xm = colX(midi) + cw / 2;
-    const sp = midiToSpelled(midi);
+    const sp = spellAtMidi(midi, pcSpelling(midi, opts.spell));
     const natural = sp.acc === 0;
 
     // header name; octave digit shown on naturals to keep columns narrow

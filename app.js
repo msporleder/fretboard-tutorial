@@ -15,7 +15,7 @@ const hintEl = $('hint');
 
 let mode = 'notes';
 const st = {
-  showNames: true, selPc: null,             // notes mode
+  showNames: true, selPc: null, accPref: 'sharp', // notes mode
   keyIdx: 0, fourths: false, minor: false,  // circle mode
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
   circleLabels: 'names',                    // circle mode: names|degrees
@@ -29,8 +29,7 @@ const HINTS = {
   notes: 'click any position to light up that note everywhere on the neck',
   circle: 'click a key — outer ring majors, inner ring minors; click a position box to number a fingering on the neck',
   intervals: 'click a root, then a second note to read the spacing — or pick an interval from the menus',
-  chord: 'click frets, staff positions (shift for ♯), or ruler slots to add and remove notes — the nut side for open strings',
-  finder: 'pick a chord — its tones map the neck (the arpeggio); click a fingering to open it in the builder',
+  chords: 'browse shapes with the selects and click one to load it — frets, staff positions (shift for ♯), and ruler slots build and edit',
 };
 
 // NB: the hidden attribute is HTML-only — it neither hides nor toggles on
@@ -47,16 +46,17 @@ function setChart(visible) { setShown($('pitchchart'), visible); }
 function renderNotes() {
   const markers = [];
   const octaveColor = st.selPc != null ? octaveColorFor(st.selPc) : null;
+  const spellOf = (midi) => spellAtMidi(midi, pcSpelling(midi, st.accPref));
   if (octaveColor) {
     for (let s = 0; s < nStr(); s++) {
       for (let f = 0; f <= NUM_FRETS; f++) {
         const midi = fretMidi(s, f);
-        if (mod12(midi) === st.selPc) markers.push({ s, f, label: sciName(midiToSpelled(midi)), fill: octaveColor(midi) });
+        if (mod12(midi) === st.selPc) markers.push({ s, f, label: sciName(spellOf(midi)), fill: octaveColor(midi) });
       }
     }
   }
   drawFretboard(fbSvg, {
-    names: st.showNames, markers,
+    names: st.showNames, spell: st.accPref, markers,
     onClick: (s, f) => {
       const pc = mod12(fretMidi(s, f));
       st.selPc = st.selPc === pc ? null : pc;
@@ -69,13 +69,14 @@ function renderNotes() {
     const legend = [];
     const low = STRING_MIDI[nStr() - 1];
     for (let midi = low + mod12(st.selPc - low); midi <= STRING_MIDI[0] + NUM_FRETS; midi += 12) {
-      legend.push(`<b style="color:${octaveColor(midi)}">${sciName(midiToSpelled(midi))}</b>`);
+      legend.push(`<b style="color:${octaveColor(midi)}">${sciName(spellOf(midi))}</b>`);
     }
     infoEl.innerHTML = `${legend.join(' · ')} — one color per octave`;
   }
 
   drawPitchChart($('pitchchart'), {
     colorFor: octaveColor,
+    spell: st.accPref,
     onClick: (midi) => {
       const pc = mod12(midi);
       st.selPc = st.selPc === pc ? null : pc;
@@ -290,9 +291,13 @@ function rulerSetInterval(i) {
   render();
 }
 
-// ---------- chord mode ----------
+// ---------- chords mode: browse shapes and build, one screen ----------
 
-function renderChord() {
+function renderChords() {
+  const formula = CHORD_FORMULAS[st.finderType];
+  const browseRoot = st.finderRoot;
+  const browseSpell = chordSpelling(browseRoot, formula);
+
   const sounding = []; // [{s, f, midi}] low string first
   for (let s = nStr() - 1; s >= 0; s--) {
     if (st.frets[s] != null) sounding.push({ s, f: st.frets[s], midi: fretMidi(s, st.frets[s]) });
@@ -301,16 +306,25 @@ function renderChord() {
   const matches = identifyChords(midis);
   const best = matches[0];
   const spellByPc = best ? chordSpelling(best.root, best.formula) : null;
-  const spellOf = (midi) => spellByPc?.get(mod12(midi)) ?? midiToSpelled(midi);
+  const spellOf = (midi) => spellByPc?.get(mod12(midi)) ?? browseSpell.get(mod12(midi)) ?? midiToSpelled(midi);
 
   // a stale placing pc (already sounding, or nowhere to go) clears itself
   if (st.placing != null && midis.some((m) => mod12(m) === st.placing)) st.placing = null;
 
-  const markers = sounding.map((n) => ({
+  // faint map of the browsed chord's tones, built notes on top
+  const markers = [];
+  for (let s = 0; s < nStr(); s++) {
+    for (let f = 0; f <= NUM_FRETS; f++) {
+      if (browseSpell.has(mod12(fretMidi(s, f))) && st.frets[s] !== f) {
+        markers.push({ s, f, dot: true, fill: '#cdc7b8' });
+      }
+    }
+  }
+  markers.push(...sounding.map((n) => ({
     s: n.s, f: n.f,
     label: sciName(spellAtMidi(n.midi, spellOf(n.midi))),
     fill: best && mod12(n.midi) === best.root ? ACCENT : INK,
-  }));
+  })));
   if (st.placing != null) {
     const color = octaveColorFor(st.placing);
     for (const c of candidatesFor((m) => mod12(m) === st.placing)) {
@@ -318,7 +332,7 @@ function renderChord() {
     }
   }
   drawFretboard(fbSvg, {
-    names: sounding.length === 0, markers,
+    markers,
     onClick: (s, f) => {
       st.frets[s] = st.frets[s] === f ? null : f;
       st.placing = null;
@@ -326,7 +340,18 @@ function renderChord() {
     },
   });
 
+  const vs = voicings(browseRoot, formula);
+  const shown = vs.slice(0, 12);
+  const tones = formula.ints.map(([s]) => {
+    const sp = browseSpell.get(mod12(browseRoot + s));
+    return LETTERS[sp.letter] + accStr(sp.acc);
+  });
+
   let html = '';
+  if (sounding.length === 0) {
+    html = `<b>${pcName(browseRoot)}${formula.sym}</b> <span class="muted">(${tones.join(' ')})</span>`
+      + ` — ${vs.length} fingering${vs.length === 1 ? '' : 's'}${vs.length > shown.length ? `, showing ${shown.length}` : ''}`;
+  }
   if (sounding.length > 0) {
     const names = sounding.map((n) => sciName(spellAtMidi(n.midi, spellOf(n.midi))));
     html += `notes: <b>${names.join(' – ')}</b>`;
@@ -368,31 +393,42 @@ function renderChord() {
     render();
   };
 
-  drawStaffNotes(staffSvg, sounding.map((n) => ({
-    ...spellAtMidi(n.midi, spellOf(n.midi)),
-    color: best && mod12(n.midi) === best.root ? ACCENT : INK,
-  })), {
-    chord: true,
-    onClick: (dia, ev) => {
-      // written line/space -> sounding natural midi, shift for sharp
-      const midi = 12 * Math.floor(dia / 7) + LETTER_PC[dia % 7] + (ev.shiftKey ? 1 : 0);
-      togglePitch((m) => m === midi);
-    },
-  });
+  const staffClick = (dia, ev) => {
+    // written line/space -> sounding natural midi, shift for sharp
+    const midi = 12 * Math.floor(dia / 7) + LETTER_PC[dia % 7] + (ev.shiftKey ? 1 : 0);
+    togglePitch((m) => m === midi);
+  };
+  if (sounding.length) {
+    drawStaffNotes(staffSvg, sounding.map((n) => ({
+      ...spellAtMidi(n.midi, spellOf(n.midi)),
+      color: best && mod12(n.midi) === best.root ? ACCENT : INK,
+    })), { chord: true, onClick: staffClick });
+  } else {
+    // browse arpeggio: tones ascending from the root, octave root on top
+    const rootMidi = INSTRUMENT.arpBase + browseRoot;
+    const arp = formula.ints.map(([s]) => spellAtMidi(rootMidi + s, browseSpell.get(mod12(browseRoot + s))));
+    arp.push(spellAtMidi(rootMidi + 12, browseSpell.get(browseRoot)));
+    drawStaffNotes(staffSvg, arp, { labels: true, onClick: staffClick });
+  }
 
-  // ruler anchor: identified root, else the lowest sounding note
-  const anchor = best ? best.root : midis.length ? mod12(Math.min(...midis)) : null;
-  const marks = anchor == null ? [] : [...new Set(midis.map(mod12))].map((pc) => {
-    const sp = spellOf(pc);
-    return { semis: mod12(pc - anchor), label: LETTERS[sp.letter] + accStr(sp.acc) };
-  });
-  if (st.placing != null && anchor != null) {
+  // ruler anchor: identified root, else the lowest sounding note, else the
+  // browsed root — clicking a slot always places or removes that tone
+  const anchor = best ? best.root : midis.length ? mod12(Math.min(...midis)) : browseRoot;
+  const marks = midis.length
+    ? [...new Set(midis.map(mod12))].map((pc) => {
+        const sp = spellOf(pc);
+        return { semis: mod12(pc - anchor), label: LETTERS[sp.letter] + accStr(sp.acc) };
+      })
+    : formula.ints.map(([s]) => {
+        const sp = browseSpell.get(mod12(browseRoot + s));
+        return { semis: s, label: LETTERS[sp.letter] + accStr(sp.acc), hollow: true };
+      });
+  if (st.placing != null) {
     const sp = midiToSpelled(st.placing);
     marks.push({ semis: mod12(st.placing - anchor), label: spelledName(sp), hollow: true });
   }
   drawDegreeRuler(rulerSvg, marks, {
     onClick: (i) => {
-      if (anchor == null) return; // nothing to be relative to yet
       const pc = mod12(anchor + i);
       if (midis.some((m) => mod12(m) === pc)) {
         st.placing = null;
@@ -410,10 +446,49 @@ function renderChord() {
       render();
     },
   });
+
+  // shape rows + fingerings for the browsed chord; click one to load it
+  const box = $('voicings');
+  box.innerHTML = '';
+  const addDiagram = (frets, label) => {
+    const svg = el('svg', { viewBox: label ? '0 0 94 110' : '0 0 94 82', class: 'diagram' });
+    drawChordDiagram(svg, frets, { rootPc: browseRoot, label });
+    if (frets.every((f) => f == null || f <= NUM_FRETS)) {
+      svg.addEventListener('click', () => {
+        st.frets = [...frets];
+        st.placing = null;
+        render();
+      });
+    }
+    box.appendChild(svg);
+  };
+  const shapeRows = [];
+  if (formula.sym === '') shapeRows.push({ label: 'CAGED', shapes: cagedShapes(browseRoot) });
+  if (formula.sym === 'm') shapeRows.push({ label: 'CAGED minor', shapes: cagedShapes(browseRoot, CAGED_MINOR_SHAPES) });
+  if (formula.sym === 'dim7') shapeRows.push({ label: 'dim7 — one shape, every three frets', shapes: dim7Positions(browseRoot) });
+  const closed = closedTriads(browseRoot, formula);
+  if (closed.length) shapeRows.push({ label: 'closed triads', shapes: closed.slice(0, 8) });
+  const spreads = spreadTriads(browseRoot, formula);
+  if (spreads.length) shapeRows.push({ label: 'spread triads', shapes: spreads.slice(0, 8) });
+  for (const row of shapeRows) {
+    const lbl = document.createElement('div');
+    lbl.className = 'vlabel';
+    lbl.textContent = row.label;
+    box.appendChild(lbl);
+    for (const sh of row.shapes) addDiagram(sh.frets, sh.name);
+  }
+  if (shapeRows.length) {
+    const lbl2 = document.createElement('div');
+    lbl2.className = 'vlabel';
+    lbl2.textContent = 'fingerings';
+    box.appendChild(lbl2);
+  }
+  for (const v of shown) addDiagram(v.frets);
+
   if (st.placing != null) {
     hintEl.textContent = `pick a spot for ${pcName(st.placing)} — hollow markers are the options, one color per octave`;
   }
-  setStaff(true); setCircle(false); setVoicings(false); setRuler(true); setChart(false);
+  setStaff(true); setCircle(false); setVoicings(true); setRuler(true); setChart(false);
 }
 
 // every playable spot for a pitch (pred over sounding midi): free strings if
@@ -457,84 +532,9 @@ function placeOnFree(pred) {
   if (spot) st.frets[spot.s] = spot.f;
 }
 
-// ---------- finder mode: chord name -> arpeggio map + fingerings ----------
-
-function renderFinder() {
-  const formula = CHORD_FORMULAS[st.finderType];
-  const rootPc = st.finderRoot;
-  const spellByPc = chordSpelling(rootPc, formula);
-  drawFretboard(fbSvg, { markers: markersForPcs(spellByPc, rootPc) });
-
-  const tones = formula.ints.map(([s]) => {
-    const sp = spellByPc.get(mod12(rootPc + s));
-    return LETTERS[sp.letter] + accStr(sp.acc);
-  });
-
-  // arpeggio: tones ascending from the root, octave root on top
-  const rootMidi = INSTRUMENT.arpBase + rootPc;
-  const arp = formula.ints.map(([s]) => spellAtMidi(rootMidi + s, spellByPc.get(mod12(rootPc + s))));
-  arp.push(spellAtMidi(rootMidi + 12, spellByPc.get(rootPc)));
-  drawStaffNotes(staffSvg, arp, { labels: true });
-
-  drawDegreeRuler(rulerSvg, formula.ints.map(([s]) => {
-    const sp = spellByPc.get(mod12(rootPc + s));
-    return { semis: s, label: LETTERS[sp.letter] + accStr(sp.acc) };
-  }));
-
-  const box = $('voicings');
-  box.innerHTML = '';
-  const addDiagram = (frets, label) => {
-    const svg = el('svg', { viewBox: label ? '0 0 94 110' : '0 0 94 82', class: 'diagram' });
-    drawChordDiagram(svg, frets, { rootPc, label });
-    if (frets.every((f) => f == null || f <= NUM_FRETS)) {
-      svg.addEventListener('click', () => {
-        st.frets = [...frets];
-        mode = 'chord';
-        history.replaceState(null, '', '#chord');
-        render();
-      });
-    }
-    box.appendChild(svg);
-  };
-
-  const shapeRows = [];
-  if (formula.sym === '') shapeRows.push({ label: 'CAGED', shapes: cagedShapes(rootPc) });
-  if (formula.sym === 'm') shapeRows.push({ label: 'CAGED minor', shapes: cagedShapes(rootPc, CAGED_MINOR_SHAPES) });
-  if (formula.sym === 'dim7') shapeRows.push({ label: 'dim7 — one shape, every three frets', shapes: dim7Positions(rootPc) });
-  const closed = closedTriads(rootPc, formula);
-  if (closed.length) {
-    shapeRows.push({ label: 'closed triads', shapes: closed.slice(0, 8) });
-  }
-  const spreads = spreadTriads(rootPc, formula);
-  if (spreads.length) {
-    shapeRows.push({ label: 'spread triads', shapes: spreads.slice(0, 8) });
-  }
-  for (const row of shapeRows) {
-    const lbl = document.createElement('div');
-    lbl.className = 'vlabel';
-    lbl.textContent = row.label;
-    box.appendChild(lbl);
-    for (const sh of row.shapes) addDiagram(sh.frets, sh.name);
-  }
-  if (shapeRows.length) {
-    const lbl2 = document.createElement('div');
-    lbl2.className = 'vlabel';
-    lbl2.textContent = 'fingerings';
-    box.appendChild(lbl2);
-  }
-
-  const vs = voicings(rootPc, formula);
-  const shown = vs.slice(0, 12);
-  for (const v of shown) addDiagram(v.frets);
-
-  infoEl.innerHTML = `<b>${pcName(rootPc)}${formula.sym}</b> <span class="muted">(${tones.join(' ')})</span>`
-    + ` — ${vs.length} fingering${vs.length === 1 ? '' : 's'}${vs.length > shown.length ? `, showing ${shown.length}` : ''}`;
-  setStaff(true); setCircle(false); setVoicings(true); setRuler(true); setChart(false);
-}
-
 // ---------- dispatch + wiring ----------
 
-const RENDERERS = { notes: renderNotes, circle: renderCircle, intervals: renderInterval, chord: renderChord, finder: renderFinder };
+const RENDERERS = { notes: renderNotes, circle: renderCircle, intervals: renderInterval, chords: renderChords };
 
 function render() {
   for (const btn of document.querySelectorAll('#modes button')) {
@@ -544,6 +544,7 @@ function render() {
     span.hidden = span.id !== 'ctl-' + mode;
   }
   hintEl.textContent = HINTS[mode];
+  $('modelabel').textContent = document.querySelector(`#modes button[data-mode="${mode}"]`).textContent.toLowerCase();
   RENDERERS[mode]();
 }
 
@@ -551,11 +552,18 @@ for (const btn of document.querySelectorAll('#modes button')) {
   btn.addEventListener('click', () => {
     mode = btn.dataset.mode;
     history.replaceState(null, '', '#' + mode);
+    $('modes').classList.remove('open');
     render();
   });
 }
 
+$('menubtn').addEventListener('click', () => $('modes').classList.toggle('open'));
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('#topbar')) $('modes').classList.remove('open');
+});
+
 $('shownames').addEventListener('change', (e) => { st.showNames = e.target.checked; render(); });
+$('accpref').addEventListener('change', (e) => { st.accPref = e.target.value; render(); });
 
 $('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
 $('circlelabels').addEventListener('change', (e) => { st.circleLabels = e.target.value; render(); });
@@ -588,11 +596,11 @@ $('chordtype').addEventListener('change', (e) => { st.finderType = parseInt(e.ta
 
 // chord modes are guitar-only; bass is a single-note instrument
 if (!INSTRUMENT.chords) {
-  for (const m of ['chord', 'finder']) {
+  for (const m of ['chords']) {
     document.querySelector(`#modes button[data-mode="${m}"]`).style.display = 'none';
     delete RENDERERS[m];
   }
-  document.querySelector('h1').textContent += ' — bass';
+  $('titlebar').textContent += ' — bass';
   document.title += ' — bass';
 }
 
@@ -605,6 +613,7 @@ instSel.addEventListener('change', (e) => {
 });
 
 const hash = location.hash.slice(1);
-if (RENDERERS[hash]) mode = hash;
+const alias = { chord: 'chords', finder: 'chords' }; // pre-merge bookmarks
+if (RENDERERS[alias[hash] ?? hash]) mode = alias[hash] ?? hash;
 rebuildQualitySelect();
 render();

@@ -8,22 +8,30 @@
 </head>
 <body>
 <main>
-  <h1>fretboard tutorial</h1>
-
-  <nav id="modes">
-    <button data-mode="notes" class="active">Notes</button>
-    <button data-mode="circle">Circle of 5ths</button>
-    <button data-mode="intervals">Intervals</button>
-    <button data-mode="chord">Chord builder</button>
-    <button data-mode="finder">Chord finder</button>
-    <select id="instrumentsel" aria-label="instrument">
-      <option value="guitar" selected>guitar</option>
-      <option value="bass">bass</option>
-    </select>
-  </nav>
+  <div id="topbar">
+    <button id="menubtn" aria-label="menu">☰</button>
+    <span id="titlebar">fretboard tutorial</span>
+    <span id="modelabel"></span>
+    <nav id="modes">
+      <button data-mode="notes" class="active">Notes</button>
+      <button data-mode="circle">Circle of 5ths</button>
+      <button data-mode="intervals">Intervals</button>
+      <button data-mode="chords">Chords</button>
+      <select id="instrumentsel" aria-label="instrument">
+        <option value="guitar" selected>guitar</option>
+        <option value="bass">bass</option>
+      </select>
+    </nav>
+  </div>
 
   <div id="controls">
-    <label class="ctl" id="ctl-notes"><input type="checkbox" id="shownames" checked> show note names</label>
+    <span class="ctl" id="ctl-notes">
+      <label><input type="checkbox" id="shownames" checked> show note names</label>
+      <select id="accpref" aria-label="accidentals">
+        <option value="sharp" selected>♯</option>
+        <option value="flat">♭</option>
+      </select>
+    </span>
     <span class="ctl" id="ctl-circle" hidden>
       <select id="circleshow">
         <option value="scale" selected>scale</option>
@@ -50,10 +58,10 @@
         <option value="-1">down</option>
       </select>
     </span>
-    <span class="ctl" id="ctl-chord" hidden><button id="clearchord">clear</button></span>
-    <span class="ctl" id="ctl-finder" hidden>
+    <span class="ctl" id="ctl-chords" hidden>
       <select id="chordroot"></select>
       <select id="chordtype"></select>
+      <button id="clearchord">clear</button>
     </span>
   </div>
 

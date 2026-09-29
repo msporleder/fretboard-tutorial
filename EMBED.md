@@ -14,6 +14,15 @@ Render any diagram on your own page with plain HTML — no per-figure JavaScript
 
 Every element with `data-draw` is rendered on page load. Call `renderEmbeds(node)` to re-render after inserting figures dynamically. See `embed-demo.html` for a working page.
 
+For pages outside this repo, hotlink via jsDelivr's GitHub CDN — no npm, no build:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/msporleder/fretboard-tutorial@main/core.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/msporleder/fretboard-tutorial@main/embed.js"></script>
+```
+
+(pin a tag instead of `@main` if you want a frozen version)
+
 ## figure types
 
 ### `data-draw="fretboard"`
@@ -30,7 +39,7 @@ One of:
 
 ### `data-draw="chart"`
 
-The Aguado pitch chart (staff run + fret table). Optional `data-note="B"` highlights one pitch class by octave.
+The Aguado pitch chart (staff run + fret table). Optional `data-note="B"` highlights one pitch class by octave. Accidentals spell sharp by default; `data-spell="flat"` flips them (also works on `fretboard` with `data-names`).
 
 ### `data-draw="staff"`
 
