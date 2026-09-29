@@ -26,10 +26,10 @@ const st = {
 };
 
 const HINTS = {
-  notes: 'click any position to light up that note everywhere on the neck',
-  circle: 'click a key — outer ring majors, inner ring minors; click a position box to number a fingering on the neck',
-  intervals: 'click a root, then a second note to read the spacing — or pick an interval from the menus',
-  chords: 'browse shapes with the selects and click one to load it — frets and ruler slots build and edit',
+  notes: 'click a note to light it up everywhere',
+  circle: 'click a key (inner ring: minors) or a position box',
+  intervals: 'click a root, then a second note',
+  chords: 'select and browse shapes, or click to build chords',
 };
 
 // NB: the hidden attribute is HTML-only — it neither hides nor toggles on
@@ -605,11 +605,19 @@ CHORD_FORMULAS.forEach((f, i) => {
   o.textContent = f.label;
   $('chordtype').appendChild(o);
 });
+// the selects define what the screen shows: changing them starts fresh
 $('chordroot').addEventListener('change', (e) => {
   st.finderRoot = e.target.value === '' ? null : parseInt(e.target.value, 10);
+  st.frets.fill(null);
+  st.placing = null;
   render();
 });
-$('chordtype').addEventListener('change', (e) => { st.finderType = parseInt(e.target.value, 10); render(); });
+$('chordtype').addEventListener('change', (e) => {
+  st.finderType = parseInt(e.target.value, 10);
+  st.frets.fill(null);
+  st.placing = null;
+  render();
+});
 
 // chord modes are guitar-only; bass is a single-note instrument
 if (!INSTRUMENT.chords) {
