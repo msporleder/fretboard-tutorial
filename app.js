@@ -153,7 +153,7 @@ function renderCircle() {
   lbl.textContent = `${arp ? 'arpeggio' : 'scale'} positions`;
   vbox.appendChild(lbl);
   boxes.forEach((b, i) => {
-    const svg = el('svg', { viewBox: '0 0 94 110', class: 'diagram' + (i === st.circlePos ? ' sel' : '') });
+    const svg = el('svg', { class: 'diagram' + (i === st.circlePos ? ' sel' : '') });
     drawChordDiagram(svg, b.frets, { rootPc, label: b.name });
     svg.addEventListener('click', () => {
       st.circlePos = st.circlePos === i ? null : i;
@@ -302,11 +302,7 @@ function renderInterval() {
   lbl.textContent = `${intervalName(st.degree, st.quality)} shapes`;
   box.appendChild(lbl);
   for (const sh of intervalShapes(semis)) {
-    const all = sh.frets.flatMap((f) => (f == null ? [] : Array.isArray(f) ? f : [f]));
-    const fr = all.filter((f) => f > 0);
-    const start = fr.length && Math.max(...fr) > 4 && !all.includes(0) ? Math.min(...fr) : 1;
-    const rows = Math.max(4, (fr.length ? Math.max(...fr) : 0) - start + 1);
-    const svg = el('svg', { viewBox: `0 0 94 ${20 + rows * 14 + 20}`, class: 'diagram' });
+    const svg = el('svg', { class: 'diagram' });
     // same scheme as the neck demo: red root, octave-colored target
     const rootMidi = fretMidi(sh.root.s, sh.root.f);
     const shTargetColor = octaveColorFor(mod12(fretMidi(sh.target.s, sh.target.f)));
@@ -512,12 +508,19 @@ function renderChords() {
     setStaff(true); setCircle(false); setVoicings(false); setRuler(true); setChart(false);
     return;
   }
-  const addDiagram = (frets, label) => {
-    const svg = el('svg', { viewBox: label ? '0 0 94 110' : '0 0 94 82', class: 'diagram' });
+  const addDiagram = (frets, label, tipText) => {
+    const isLoaded = frets.length === st.frets.length && frets.every((f, i) => f === st.frets[i]);
+    const svg = el('svg', { class: 'diagram' + (isLoaded ? ' sel' : '') });
     drawChordDiagram(svg, frets, { rootPc: browseRoot, label });
+    if (tipText) {
+      const tip = el('title', {});
+      tip.textContent = tipText;
+      svg.appendChild(tip);
+    }
     if (frets.every((f) => f == null || f <= NUM_FRETS)) {
       svg.addEventListener('click', () => {
-        st.frets = [...frets];
+        if (isLoaded) st.frets.fill(null); // click again to clear
+        else st.frets = [...frets];
         st.placing = null;
         render();
       });
@@ -528,16 +531,26 @@ function renderChords() {
   if (formula.sym === '') shapeRows.push({ label: 'CAGED', shapes: cagedShapes(browseRoot) });
   if (formula.sym === 'm') shapeRows.push({ label: 'CAGED minor', shapes: cagedShapes(browseRoot, CAGED_MINOR_SHAPES) });
   if (formula.sym === 'dim7') shapeRows.push({ label: 'dim7 — one shape, every three frets', shapes: dim7Positions(browseRoot) });
-  const closed = closedTriads(browseRoot, formula);
-  if (closed.length) shapeRows.push({ label: 'closed triads', shapes: closed.slice(0, 8) });
-  const spreads = spreadTriads(browseRoot, formula);
-  if (spreads.length) shapeRows.push({ label: 'spread triads', shapes: spreads.slice(0, 8) });
+  // one diagram per string-set + inversion (list is sorted best-first)
+  const uniqShapes = (list) => {
+    const seen = new Set();
+    return list.filter((v) => {
+      const k = v.strings + '|' + v.name;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  const closed = uniqShapes(closedTriads(browseRoot, formula));
+  if (closed.length) shapeRows.push({ label: 'closed triads', shapes: closed });
+  const spreads = uniqShapes(spreadTriads(browseRoot, formula));
+  if (spreads.length) shapeRows.push({ label: 'spread triads', shapes: spreads.slice(0, 12) });
   for (const row of shapeRows) {
     const lbl = document.createElement('div');
     lbl.className = 'vlabel';
     lbl.textContent = row.label;
     box.appendChild(lbl);
-    for (const sh of row.shapes) addDiagram(sh.frets, sh.name);
+    for (const sh of row.shapes) addDiagram(sh.frets, sh.name, sh.strings);
   }
   if (shapeRows.length) {
     const lbl2 = document.createElement('div');

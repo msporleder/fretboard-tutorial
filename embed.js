@@ -160,7 +160,6 @@ const EMBED_DRAWERS = {
   },
 
   diagram(svg, d) {
-    svg.setAttribute('viewBox', svg.getAttribute('viewBox') ?? (d.label ? '0 0 94 110' : '0 0 94 82'));
     drawChordDiagram(svg, parseFrets(d.frets), {
       rootPc: d.root != null ? pcOf(d.root) : null,
       label: d.label,

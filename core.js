@@ -310,6 +310,8 @@ function drawChordDiagram(svg, frets, opts = {}) {
   const start = fretted.length && Math.max(...fretted) > 4 && !hasOpen ? Math.min(...fretted) : 1;
   const rows = Math.max(4, (fretted.length ? Math.max(...fretted) : 0) - start + 1);
   const rootColor = opts.rootPc != null ? octaveColorFor(opts.rootPc) : () => null;
+  // size to the actual grid so tall (nut-anchored) shapes never clip
+  svg.setAttribute('viewBox', `0 0 94 ${y0 + rows * dy + (opts.label ? 21 : 7)}`);
 
   const n = frets.length;
   if (opts.label) {
@@ -861,11 +863,20 @@ function positionBoxes(rootPc, pcs, shapes = CAGED_SHAPES) {
 }
 
 // three-note voicings of a triad on the given string sets, named by
-// inversion; ranked low-position first, root position slightly preferred
+// inversion; sets that cross the irregular pair (G–B on guitar) sort after
+// the regular ones, then low-position first, root position slightly preferred
 function triadVoicings(rootPc, formula, sets) {
   if (formula.ints.length !== 3) return [];
   const pcSet = new Set(formula.ints.map(([s]) => mod12(rootPc + s)));
   const degOf = new Map(formula.ints.map(([s, d]) => [mod12(rootPc + s), d]));
+  const gaps = [];
+  for (let s = 0; s + 1 < nStr(); s++) gaps.push(STRING_MIDI[s] - STRING_MIDI[s + 1]);
+  const majority = gaps.slice().sort((a, b) =>
+    gaps.filter((g) => g === b).length - gaps.filter((g) => g === a).length)[0];
+  const crossesIrregular = (set) => {
+    for (let s = set[0]; s < set[set.length - 1]; s++) if (gaps[s] !== majority) return true;
+    return false;
+  };
   const out = [];
   for (const set of sets) {
     const cands = set.map((s) => {
@@ -884,12 +895,17 @@ function triadVoicings(rootPc, formula, sets) {
       const bassDeg = degOf.get(mod12(Math.min(...midis)));
       out.push({
         name: bassDeg === 1 ? 'root position' : `${DEGREE_NAMES[bassDeg]} in bass`,
+        strings: [...set].reverse().map((s) => STRING_LABELS[s]).join('–'),
         frets,
-        score: (fr.length ? Math.min(...fr) : 0) * 10 + span + (bassDeg === 1 ? 0 : 3),
+        cross: crossesIrregular(set) ? 1 : 0,
+        setTop: set[0],
+        pos: (fr.length ? Math.min(...fr) : 0) * 10 + span,
       });
     }
   }
-  return out.sort((x, y) => x.score - y.score);
+  // regular sets first, bass-most set first, then walk up the neck —
+  // each string set reads as the inversion drill, low to high
+  return out.sort((x, y) => x.cross - y.cross || y.setTop - x.setTop || x.pos - y.pos);
 }
 
 // close-position triads on three adjacent strings — the easy portable
@@ -932,6 +948,7 @@ function intervalShapes(semis) {
       total++;
     }
     for (const [off, pairs] of [...groups.entries()].sort((a, b) => b[1].length - a[1].length)) {
+      if (Math.abs(off) > 4) continue; // beyond a hand's reach, it's not a shape
       // draw the model on a mid-neck pair (keeps the general model off the B string)
       const { hi, lo } = pairs[Math.floor(pairs.length / 2)];
       let rootF = 5;
