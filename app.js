@@ -205,6 +205,19 @@ function setTargetFromClick(s, f) {
   $('dir').value = String(st.dir);
 }
 
+// standard words for a fretboard move: higher/lower strings (pitch-wise),
+// frets up/down the neck (up = toward the bridge)
+function distanceWords(from, to) {
+  const strings = from.s - to.s; // positive: toward the higher strings
+  const frets = to.f - from.f;   // positive: up the neck
+  const parts = [];
+  if (strings === 0) parts.push('same string');
+  else parts.push(`${Math.abs(strings)} string${Math.abs(strings) === 1 ? '' : 's'} ${strings > 0 ? 'higher' : 'lower'}`);
+  if (frets === 0) parts.push('same fret');
+  else parts.push(`${Math.abs(frets)} fret${Math.abs(frets) === 1 ? '' : 's'} ${frets > 0 ? 'up' : 'down'}`);
+  return parts.join(', ');
+}
+
 function renderInterval() {
   const markers = [];
   let html = '';
@@ -221,10 +234,14 @@ function renderInterval() {
       for (let f = 0; f <= NUM_FRETS; f++) {
         if (mod12(fretMidi(s, f)) === targetPc && !(s === st.root.s && f === st.root.f)) {
           const clicked = st.target && s === st.target.s && f === st.target.f;
-          markers.push({
-            s, f, label: sciName(spellAtMidi(fretMidi(s, f), target)),
-            fill: targetColor(fretMidi(s, f)), hollow: !clicked,
-          });
+          if (clicked) {
+            markers.push({ s, f, label: sciName(spellAtMidi(fretMidi(s, f), target)), fill: targetColor(fretMidi(s, f)) });
+          } else if (st.target) {
+            // a pair is demonstrated: other octaves stay quiet context
+            markers.push({ s, f, dot: true, fill: targetColor(fretMidi(s, f)) });
+          } else {
+            markers.push({ s, f, label: sciName(spellAtMidi(fretMidi(s, f), target)), fill: targetColor(fretMidi(s, f)), hollow: true });
+          }
         }
       }
     }
@@ -234,6 +251,7 @@ function renderInterval() {
       + ` — ${semis} half step${semis === 1 ? '' : 's'}<br>`
       + `${sciName(root)} → <b>${sciName(target)}</b>`;
     if (st.target) {
+      html += `<br><span class="muted">${distanceWords(st.root, st.target)}</span>`;
       const d = Math.abs(fretMidi(st.target.s, st.target.f) - rootMidi);
       if (d > 12) {
         html += `<br><span class="muted">clicked notes span ${semitoneName(d)} (${d} half steps) — named within the octave</span>`;
@@ -274,7 +292,43 @@ function renderInterval() {
     },
   });
   infoEl.innerHTML = html;
-  setStaff(true); setCircle(false); setVoicings(false); setRuler(true); setChart(false);
+
+  // Aguado's movable shape models for this interval; click one to place it
+  const semis = intervalSemitones(st.degree, st.quality);
+  const box = $('voicings');
+  box.innerHTML = '';
+  const lbl = document.createElement('div');
+  lbl.className = 'vlabel';
+  lbl.textContent = `${intervalName(st.degree, st.quality)} shapes`;
+  box.appendChild(lbl);
+  for (const sh of intervalShapes(semis)) {
+    const all = sh.frets.flatMap((f) => (f == null ? [] : Array.isArray(f) ? f : [f]));
+    const fr = all.filter((f) => f > 0);
+    const start = fr.length && Math.max(...fr) > 4 && !all.includes(0) ? Math.min(...fr) : 1;
+    const rows = Math.max(4, (fr.length ? Math.max(...fr) : 0) - start + 1);
+    const svg = el('svg', { viewBox: `0 0 94 ${20 + rows * 14 + 20}`, class: 'diagram' });
+    // same scheme as the neck demo: red root, octave-colored target
+    const rootMidi = fretMidi(sh.root.s, sh.root.f);
+    const shTargetColor = octaveColorFor(mod12(fretMidi(sh.target.s, sh.target.f)));
+    drawChordDiagram(svg, sh.frets, {
+      label: sh.name,
+      colorFor: (m) => (m === rootMidi ? ACCENT : shTargetColor(m)),
+      hollowFor: (m) => m !== rootMidi, // targets are rings, like on the neck
+    });
+    const tip = el('title', {});
+    tip.textContent = distanceWords(sh.root, sh.target);
+    svg.appendChild(tip);
+    svg.addEventListener('click', () => {
+      st.root = { ...sh.root };
+      st.target = { ...sh.target };
+      st.dir = 1;
+      $('dir').value = '1';
+      render();
+    });
+    box.appendChild(svg);
+  }
+
+  setStaff(true); setCircle(false); setVoicings(true); setRuler(true); setChart(false);
 }
 
 // clicking a ruler slot picks that interval (upward, default diatonic reading)

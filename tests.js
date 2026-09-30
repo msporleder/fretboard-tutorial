@@ -220,3 +220,24 @@ for (let pc = 0; pc < 12; pc++) {
     assert(mod12(LETTER_PC[sp.letter] + sp.acc) === pc, `round trip ${pc} ${pref}`);
   }
 }
+// interval shapes: every model sounds the interval it claims
+for (const semis of [1, 4, 5, 7, 12]) {
+  const shapes = intervalShapes(semis);
+  assert(shapes.length > 0, "shapes exist for " + semis);
+  for (const sh of shapes) {
+    assert(fretMidi(sh.target.s, sh.target.f) - fretMidi(sh.root.s, sh.root.f) === semis,
+      `shape interval ${semis}: ${sh.name}`);
+  }
+}
+// P4 on guitar: general adjacent model is same-fret (offset 0), G–B is +1
+{
+  const shapes = intervalShapes(5);
+  const adj = shapes.find((s) => s.name === 'adjacent');
+  assert(adj && adj.target.f - adj.root.f === 0, "P4 adjacent offset");
+  const gb = shapes.find((s) => s.name === 'G–B');
+  assert(gb && gb.target.f - gb.root.f === 1, "P4 G–B offset");
+}
+// bass has uniform pairs: no G–B special
+setInstrument('bass');
+assert(intervalShapes(5).every((s) => !s.name.includes('–') || s.name === 'one string'), "bass shapes uniform: " + intervalShapes(5).map((s) => s.name));
+setInstrument('guitar');

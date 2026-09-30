@@ -305,7 +305,9 @@ function drawChordDiagram(svg, frets, opts = {}) {
   const x0 = 30, dx = 11, y0 = 20, dy = 14;
   const perString = frets.map((f) => (f == null ? null : Array.isArray(f) ? f : [f]));
   const fretted = perString.flatMap((fs) => fs ?? []).filter((f) => f > 0);
-  const start = fretted.length && Math.max(...fretted) > 4 ? Math.min(...fretted) : 1;
+  // an open string anchors the window at the nut, however far the frets reach
+  const hasOpen = perString.some((fs) => fs?.includes(0));
+  const start = fretted.length && Math.max(...fretted) > 4 && !hasOpen ? Math.min(...fretted) : 1;
   const rows = Math.max(4, (fretted.length ? Math.max(...fretted) : 0) - start + 1);
   const rootColor = opts.rootPc != null ? octaveColorFor(opts.rootPc) : () => null;
 
@@ -337,9 +339,13 @@ function drawChordDiagram(svg, frets, opts = {}) {
       continue;
     }
     for (const f of fs) {
-      const color = rootColor(fretMidi(s, f)) ?? INK;
+      const midi = fretMidi(s, f);
+      const color = opts.colorFor?.(midi) ?? rootColor(midi) ?? INK;
+      const ring = opts.hollowFor?.(midi);
       if (f === 0) {
         svg.appendChild(el('circle', { cx: x, cy: y0 - 8, r: 3.4, fill: 'none', stroke: color, 'stroke-width': 1.3 }));
+      } else if (ring) {
+        svg.appendChild(el('circle', { cx: x, cy: y0 + (f - start + 0.5) * dy, r: 4.2, fill: 'none', stroke: color, 'stroke-width': 1.6 }));
       } else {
         svg.appendChild(el('circle', { cx: x, cy: y0 + (f - start + 0.5) * dy, r: 4.5, fill: color }));
       }
@@ -900,6 +906,48 @@ function spreadTriads(rootPc, formula) {
   const sets = [];
   for (let a = 0; a + 3 < nStr(); a++) sets.push([a, a + 1, a + 3], [a, a + 2, a + 3]);
   return triadVoicings(rootPc, formula, sets);
+}
+
+// movable two-note shapes for an interval, after Aguado's "general models":
+// one per distinct fret offset on adjacent and skip-one string pairs (the
+// G–B pair gets its own model on guitar), plus the same-string reach for
+// short intervals. Shapes are placed at a canonical mid-neck spot.
+function intervalShapes(semis) {
+  const out = [];
+  if (semis >= 1 && semis <= NUM_FRETS) {
+    const s = Math.min(2, nStr() - 1);
+    const f0 = Math.min(3, NUM_FRETS - semis);
+    const frets = new Array(nStr()).fill(null);
+    frets[s] = [f0, f0 + semis];
+    out.push({ name: 'one string', frets, root: { s, f: f0 }, target: { s, f: f0 + semis } });
+  }
+  for (let skip = 0; skip <= 1; skip++) {
+    const groups = new Map(); // fret offset -> pairs [{hi, lo}]
+    let total = 0;
+    for (let hi = 0; hi + 1 + skip < nStr(); hi++) {
+      const lo = hi + 1 + skip;
+      const off = semis - (STRING_MIDI[hi] - STRING_MIDI[lo]);
+      if (!groups.has(off)) groups.set(off, []);
+      groups.get(off).push({ hi, lo });
+      total++;
+    }
+    for (const [off, pairs] of [...groups.entries()].sort((a, b) => b[1].length - a[1].length)) {
+      // draw the model on a mid-neck pair (keeps the general model off the B string)
+      const { hi, lo } = pairs[Math.floor(pairs.length / 2)];
+      let rootF = 5;
+      if (rootF + off < 1) rootF = 1 - off;
+      if (rootF + off > NUM_FRETS) rootF = NUM_FRETS - off;
+      if (rootF < 1 || rootF > NUM_FRETS) continue;
+      const frets = new Array(nStr()).fill(null);
+      frets[lo] = rootF;
+      frets[hi] = rootF + off;
+      const name = pairs.length * 2 > total
+        ? (skip ? 'skip one' : 'adjacent')
+        : pairs.map((p) => `${STRING_LABELS[p.lo]}–${STRING_LABELS[p.hi]}`).join(' ');
+      out.push({ name, frets, root: { s: lo, f: rootF }, target: { s: hi, f: rootF + off } });
+    }
+  }
+  return out;
 }
 
 // dim7 is symmetric (stacked minor 3rds): one grip, D-string bass, and the
