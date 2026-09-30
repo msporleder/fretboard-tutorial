@@ -370,14 +370,15 @@ function renderChords() {
   for (let s = 0; s < nStr(); s++) {
     for (let f = 0; f <= NUM_FRETS; f++) {
       if (browseSpell.has(mod12(fretMidi(s, f))) && st.frets[s] !== f) {
-        markers.push({ s, f, dot: true, fill: mod12(fretMidi(s, f)) === browseRoot ? ACCENT : INK });
+        markers.push({ s, f, dot: true, fill: octaveColorFor(browseRoot ?? -1)(fretMidi(s, f)) ?? INK });
       }
     }
   }
+  const builtRootColor = best ? octaveColorFor(best.root) : () => null;
   markers.push(...sounding.map((n) => ({
     s: n.s, f: n.f,
     label: sciName(spellAtMidi(n.midi, spellOf(n.midi))),
-    fill: best && mod12(n.midi) === best.root ? ACCENT : INK,
+    fill: builtRootColor(n.midi) ?? INK,
   })));
   if (st.placing != null) {
     const color = octaveColorFor(st.placing);
@@ -451,7 +452,7 @@ function renderChords() {
   if (sounding.length) {
     drawStaffNotes(staffSvg, sounding.map((n) => ({
       ...spellAtMidi(n.midi, spellOf(n.midi)),
-      color: best && mod12(n.midi) === best.root ? ACCENT : INK,
+      color: builtRootColor(n.midi) ?? INK,
     })), { chord: true });
   } else if (browseRoot != null) {
     // browse arpeggio: tones ascending from the root, octave root on top
