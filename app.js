@@ -17,6 +17,7 @@ let mode = 'notes';
 const st = {
   showNames: true, selPc: null, accPref: 'sharp', // notes mode
   keyIdx: 0, fourths: false, minor: false,  // circle mode
+  scaleType: 0,                             // circle mode: SCALE_TYPES index
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
   circleLabels: 'names',                    // circle mode: names|degrees
   root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
@@ -93,24 +94,36 @@ function renderCircle() {
     fourths: st.fourths,
     selected: st.minor ? null : st.keyIdx,
     minorSelected: st.minor ? st.keyIdx : null,
-    onClick: (k, isMinor) => { st.keyIdx = k; st.minor = isMinor; st.circlePos = null; render(); },
+    onClick: (k, isMinor) => {
+      st.keyIdx = k;
+      st.minor = isMinor;
+      st.circlePos = null;
+      if (isMinor) { // inner ring is the relative-minor shortcut
+        st.scaleType = SCALE_TYPES.findIndex((t) => t.name === 'minor');
+        $('scaletype').value = String(st.scaleType);
+      }
+      render();
+    },
     onToggle: () => { st.fourths = !st.fourths; render(); },
   });
 
-  // minor key root = 6th degree of the relative major, kept in staff range
+  // the ring picks the tonic (inner = relative minor), kept in staff range
   const majRoot = keyRoot(st.keyIdx, INSTRUMENT.scaleOctave);
   let root = st.minor ? majorScale(majRoot)[5] : majRoot;
   if (spelledToMidi(root) > INSTRUMENT.rootMax) root = { ...root, octave: root.octave - 1 };
   const rootPc = mod12(spelledToMidi(root));
-  const scale = scaleFrom(root, st.minor ? MINOR_STEPS : MAJOR_STEPS);
+  const type = SCALE_TYPES[st.scaleType];
+  const scale = scaleOf(root, type);
+  const scalePcs = scale.slice(0, -1);
+  const minorish = scalePcs.some((n) => mod12(spelledToMidi(n) - rootPc) === 3);
 
   const arp = st.circleShow === 'arp';
-  const triad = CHORD_FORMULAS[st.minor ? 1 : 0];
+  const triad = CHORD_FORMULAS[minorish ? 1 : 0];
   const spellByPc = arp
     ? chordSpelling(rootPc, triad)
-    : new Map(scale.slice(0, 7).map((n) => [mod12(spelledToMidi(n)), n]));
+    : new Map(scalePcs.map((n) => [mod12(spelledToMidi(n)), n]));
   const pcs = new Set(spellByPc.keys());
-  const boxes = positionBoxes(rootPc, pcs, st.minor ? CAGED_MINOR_SHAPES : CAGED_SHAPES);
+  const boxes = positionBoxes(rootPc, pcs, minorish ? CAGED_MINOR_SHAPES : CAGED_SHAPES);
   if (st.circlePos != null && st.circlePos >= boxes.length) st.circlePos = null;
 
   // big fretboard: everything, or one numbered position box
@@ -127,12 +140,15 @@ function renderCircle() {
     });
   }
 
-  const name = `${spelledName(root)} ${st.minor ? 'minor' : 'major'}`;
-  const tones = [...spellByPc.keys()].length && arp
+  const name = `${spelledName(root)} ${type.name}`;
+  const tones = arp
     ? triad.ints.map(([s]) => { const sp = spellByPc.get(mod12(rootPc + s)); return LETTERS[sp.letter] + accStr(sp.acc); })
-    : scale.slice(0, 7).map(spelledName);
-  let html = `<b>${name}</b> — ${tones.join(' ')} <span class="muted">(relative ${st.minor ? 'major' : 'minor'}: `
-    + `${st.minor ? CIRCLE_MAJORS[st.keyIdx] : CIRCLE_MINORS[st.keyIdx]})</span>`;
+    : scalePcs.map(spelledName);
+  let html = `<b>${name}</b> — ${tones.join(' ')}`;
+  if (type.name === 'major' || type.name === 'minor') {
+    html += ` <span class="muted">(relative ${st.minor ? 'major' : 'minor'}: `
+      + `${st.minor ? CIRCLE_MAJORS[st.keyIdx] : CIRCLE_MINORS[st.keyIdx]})</span>`;
+  }
   if (st.circlePos != null) {
     const box = boxes[st.circlePos];
     html += `<br>around the ${box.name}, frets ${box.wLo}–${box.wHi} — numbered low to high`;
@@ -413,16 +429,19 @@ function renderChords() {
     }
     if (gaps.length) html += `<br>spacing: ${gaps.join(', ')}`;
     if (matches.length) {
-      const spelled = best.formula.ints.map(([semis]) => {
+      const soundingPcs = new Set(midis.map(mod12));
+      const present = best.formula.ints.filter(([semis]) => soundingPcs.has(mod12(best.root + semis)));
+      const spelled = present.map(([semis]) => {
         const sp = spellByPc.get(mod12(best.root + semis));
         return LETTERS[sp.letter] + accStr(sp.acc);
       });
-      const fromRoot = best.formula.ints.filter(([semis]) => semis !== 0).map(([semis]) => {
+      const fromRoot = present.filter(([semis]) => semis !== 0).map(([semis]) => {
         const sp = spellByPc.get(mod12(best.root + semis));
         return `${LETTERS[sp.letter] + accStr(sp.acc)} = ${semitoneName(semis)} (${semis})`;
       });
       html += `<br>from ${pcName(best.root)}: ${fromRoot.join(', ')}`;
-      html += `<br>chord: <b>${chordName(best)}</b> <span class="muted">(${spelled.join(' ')})</span>`;
+      const kind = voicingKind(midis);
+      html += `<br>chord: <b>${chordName(best)}</b> <span class="muted">(${spelled.join(' ')})${kind ? ' · ' + kind : ''}</span>`;
       if (matches.length > 1) {
         html += `<br><span class="muted">also reads as: ${matches.slice(1, 4).map(chordName).join(', ')}</span>`;
       }
@@ -544,7 +563,31 @@ function renderChords() {
   const closed = uniqShapes(closedTriads(browseRoot, formula));
   if (closed.length) shapeRows.push({ label: 'closed triads', shapes: closed });
   const spreads = uniqShapes(spreadTriads(browseRoot, formula));
-  if (spreads.length) shapeRows.push({ label: 'spread triads', shapes: spreads.slice(0, 12) });
+  if (spreads.length) shapeRows.push({ label: 'spread triads (drop 2)', shapes: spreads.slice(0, 12) });
+
+  // seventh/sixth-chord vocabulary: shells, then the drop voicings.
+  // Shells proper: root in the bass, named by which tone is on top — the
+  // R-3-7 and R-7-3 arrangements are distinct and both shown
+  const shellF = shellFormula(formula);
+  if (shellF) {
+    const degOf = new Map(shellF.ints.map(([s, d]) => [mod12(browseRoot + s), d]));
+    const shells = uniqShapes(
+      [...closedTriads(browseRoot, shellF), ...spreadTriads(browseRoot, shellF)]
+        .map((v) => {
+          const midis = [];
+          v.frets.forEach((f, s) => { if (f != null) midis.push(fretMidi(s, f)); });
+          if (mod12(Math.min(...midis)) !== browseRoot) return null; // root in the bass only
+          return { ...v, name: `${DEGREE_NAMES[degOf.get(mod12(Math.max(...midis)))]} on top` };
+        })
+        .filter(Boolean)
+        .sort(byTreble));
+    if (shells.length) shapeRows.push({ label: 'shells — no 5th', shapes: shells.slice(0, 8) });
+  }
+  const drops = dropVoicings(browseRoot, formula);
+  for (const kind of ['close', 'drop 2', 'drop 3']) {
+    const list = uniqShapes(drops.filter((v) => v.kind === kind));
+    if (list.length) shapeRows.push({ label: kind, shapes: list.slice(0, 8) });
+  }
   for (const row of shapeRows) {
     const lbl = document.createElement('div');
     lbl.className = 'vlabel';
@@ -640,6 +683,17 @@ document.addEventListener('click', (ev) => {
 $('shownames').addEventListener('change', (e) => { st.showNames = e.target.checked; render(); });
 $('accpref').addEventListener('change', (e) => { st.accPref = e.target.value; render(); });
 
+SCALE_TYPES.forEach((t, i) => {
+  const o = document.createElement('option');
+  o.value = String(i);
+  o.textContent = t.name;
+  $('scaletype').appendChild(o);
+});
+$('scaletype').addEventListener('change', (e) => {
+  st.scaleType = parseInt(e.target.value, 10);
+  st.circlePos = null;
+  render();
+});
 $('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
 $('circlelabels').addEventListener('change', (e) => { st.circleLabels = e.target.value; render(); });
 

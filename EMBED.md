@@ -63,7 +63,7 @@ Mini chord chart. `data-frets="x32010"` (see fret strings below), optional `data
 - **intervals**: quality + degree: `m2 M2 m3 M3 P4 A4 d5 P5 m6 M6 m7 M7 P8`; direction `up` (default) or `down`
 - **fret strings**: low string first, `x` = muted: `x32010`, or comma form for frets past 9: `x,10,12,12,10,x`
 - **chord names**: root + type symbol from the finder (`C`, `Am`, `E7`, `Cm7♭5`, `Fmaj7`) or the long label (`C major 6th`)
-- **keys**: `G major`, `e minor` (case-insensitive kind)
+- **keys/scales**: `G major`, `e minor`, `E dorian`, `G mixolydian`, `A harmonic minor`, `A melodic minor`, `G major pentatonic`, `a minor pentatonic`, `C blues`
 
 ## instrument
 

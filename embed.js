@@ -54,15 +54,18 @@ function parseChordName(s) {
   return { rootPc, formula };
 }
 
-// "G major" / "e minor" -> { root (spelled, low register), steps }
+// "G major" / "e minor" / "a minor pentatonic" / "C blues"
+// -> { root (spelled, low register), type (SCALE_TYPES entry) }
 function parseKey(s) {
-  const [name, kind] = s.trim().split(/\s+/);
+  const [name, ...rest] = s.trim().split(/\s+/);
+  const kind = rest.join(' ').toLowerCase() || 'major';
+  const type = SCALE_TYPES.find((t) => t.name === kind);
+  if (!type) throw new Error('unknown scale type: ' + kind);
   const sp = parseSci(name + '0');
-  const octave = INSTRUMENT.scaleOctave - (kind === 'minor' ? 1 : 0);
-  let root = { letter: sp.letter, acc: sp.acc, octave };
+  let root = { letter: sp.letter, acc: sp.acc, octave: INSTRUMENT.scaleOctave };
   while (spelledToMidi(root) < STRING_MIDI[nStr() - 1]) root = { ...root, octave: root.octave + 1 };
   while (spelledToMidi(root) > INSTRUMENT.rootMax) root = { ...root, octave: root.octave - 1 };
-  return { root, steps: kind === 'minor' ? MINOR_STEPS : MAJOR_STEPS };
+  return { root, type };
 }
 
 function pcOf(noteName) {
@@ -95,9 +98,9 @@ const EMBED_DRAWERS = {
       }
       opts.markers = markers;
     } else if (d.scale != null) {
-      const { root, steps } = parseKey(d.scale);
-      const scale = scaleFrom(root, steps);
-      const spellByPc = new Map(scale.slice(0, 7).map((n) => [mod12(spelledToMidi(n)), n]));
+      const { root, type } = parseKey(d.scale);
+      const scale = scaleOf(root, type);
+      const spellByPc = new Map(scale.slice(0, -1).map((n) => [mod12(spelledToMidi(n)), n]));
       opts.markers = markersForPcs(spellByPc, mod12(spelledToMidi(root)), 'degrees' in d ? 'degrees' : 'names');
     } else if (d.note != null) {
       const pc = pcOf(d.note);

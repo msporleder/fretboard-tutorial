@@ -241,3 +241,63 @@ for (const semis of [1, 4, 5, 7, 12]) {
 setInstrument('bass');
 assert(intervalShapes(5).every((s) => !s.name.includes('–') || s.name === 'one string'), "bass shapes uniform: " + intervalShapes(5).map((s) => s.name));
 setInstrument('guitar');
+// voicing structure classification
+assert(voicingKind([60, 64, 67, 71]) === 'close', "maj7 close");
+assert(voicingKind([55, 60, 64, 71]) === 'drop 2', "maj7 drop 2");
+assert(voicingKind([52, 60, 67, 71]) === 'drop 3', "maj7 drop 3");
+assert(voicingKind([48, 52, 55]) === 'close', "triad close");
+assert(voicingKind([48, 55, 64]) === 'spread (drop 2)', "triad spread");
+assert(voicingKind([48, 48, 55]) === null, "doubled pitch unclassified");
+// drop voicings: every result is the chord, within reach, and classified
+{
+  const maj7 = CHORD_FORMULAS.find((f) => f.sym === 'maj7');
+  const drops = dropVoicings(0, maj7);
+  assert(drops.some((v) => v.kind === 'drop 2') && drops.some((v) => v.kind === 'drop 3'), "both kinds found");
+  for (const v of drops) {
+    const midis = [];
+    v.frets.forEach((f, s) => { if (f != null) midis.push(fretMidi(s, f)); });
+    assert(new Set(midis.map(mod12)).size === 4, "drop tones: " + v.frets);
+    assert(voicingKind(midis) === v.kind, "drop kind: " + v.frets);
+  }
+  // the classic mid-string Cmaj7 drop 2: x,3,5,4,5,x (low to high)
+  assert(drops.some((v) => v.frets.every((f, i) => f === [null, 5, 4, 5, 3, null][i])), "classic Cmaj7 drop 2");
+}
+// shells: R + quality + 7th, no 5th
+{
+  const sf = shellFormula(CHORD_FORMULAS.find((f) => f.sym === '7'));
+  const pcs = new Set(sf.ints.map(([s]) => s));
+  assert(pcs.has(0) && pcs.has(4) && pcs.has(10) && !pcs.has(7), "shell tones");
+  assert(shellFormula(CHORD_FORMULAS.find((f) => f.sym === 'dim7')) === null, "no dim7 shell");
+  assert(shellFormula(CHORD_FORMULAS[0]) === null, "no triad shell");
+}
+// omitted-5th identification: shells name themselves
+{
+  const m = identifyChords([48, 52, 59]); // C E B
+  assert(chordName(m[0]) === 'Cmaj7 (no 5th)', "maj7 shell: " + chordName(m[0]));
+  const m2 = identifyChords([48, 52, 58]); // C E Bb
+  assert(chordName(m2[0]) === 'C7 (no 5th)', "dom7 shell: " + chordName(m2[0]));
+  // exact matches still outrank omitted-5th readings
+  const m3 = identifyChords([48, 52, 55, 58]);
+  assert(chordName(m3[0]) === 'C7', "exact first: " + chordName(m3[0]));
+  // triads unaffected
+  assert(chordName(identifyChords([48, 52, 55])[0]) === 'C', "triad still C");
+}
+// shells extend to sixth chords; sus quality allowed, add9 and dim7 excluded
+assert(shellFormula(CHORD_FORMULAS.find((f) => f.sym === '6')).ints.some(([, d]) => d === 6), "6 chord shell");
+assert(shellFormula(CHORD_FORMULAS.find((f) => f.sym === '7sus4')).ints.some(([, d]) => d === 4), "7sus4 shell");
+assert(shellFormula(CHORD_FORMULAS.find((f) => f.sym === 'add9')) === null, "no add9 shell");
+// scale types: spellings and sizes
+{
+  const names = (root, tn) => scaleOf(root, SCALE_TYPES.find((t) => t.name === tn)).slice(0, -1).map(spelledName).join(' ');
+  assert(names({ letter: 2, acc: 0, octave: 3 }, 'dorian') === 'E F♯ G A B C♯ D', "E dorian: " + names({ letter: 2, acc: 0, octave: 3 }, 'dorian'));
+  assert(names({ letter: 4, acc: 0, octave: 3 }, 'mixolydian') === 'G A B C D E F', "G mixolydian");
+  assert(names({ letter: 5, acc: 0, octave: 2 }, 'minor pentatonic') === 'A C D E G', "A minor pent: " + names({ letter: 5, acc: 0, octave: 2 }, 'minor pentatonic'));
+  assert(names({ letter: 4, acc: 0, octave: 2 }, 'major pentatonic') === 'G A B D E', "G major pent");
+  assert(names({ letter: 0, acc: 0, octave: 3 }, 'blues') === 'C E♭ F G♭ G B♭', "C blues: " + names({ letter: 0, acc: 0, octave: 3 }, 'blues'));
+  assert(names({ letter: 5, acc: 0, octave: 2 }, 'harmonic minor') === 'A B C D E F G♯', "A harmonic minor");
+  assert(names({ letter: 5, acc: 0, octave: 2 }, 'melodic minor') === 'A B C D E F♯ G♯', "A melodic minor");
+  for (const t of SCALE_TYPES) {
+    const sc = scaleOf({ letter: 0, acc: 0, octave: 3 }, t);
+    assert(spelledToMidi(sc[sc.length - 1]) - spelledToMidi(sc[0]) === 12, "octave closes: " + t.name);
+  }
+}

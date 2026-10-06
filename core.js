@@ -115,6 +115,33 @@ const MINOR_STEPS = [2, 1, 2, 2, 1, 2, 2]; // natural minor
 
 function majorScale(root) { return scaleFrom(root, MAJOR_STEPS); }
 
+// seven-note types spell by walking letters; pentatonics and blues pick
+// their notes out of a parent scale so the spellings stay right
+const SCALE_TYPES = [
+  { name: 'major', steps: MAJOR_STEPS },
+  { name: 'minor', steps: MINOR_STEPS },
+  { name: 'dorian', steps: [2, 1, 2, 2, 2, 1, 2] },
+  { name: 'mixolydian', steps: [2, 2, 1, 2, 2, 1, 2] },
+  { name: 'harmonic minor', steps: [2, 1, 2, 2, 1, 3, 1] },
+  { name: 'melodic minor', steps: [2, 1, 2, 2, 2, 2, 1] },
+  { name: 'major pentatonic', parent: MAJOR_STEPS, pick: [0, 1, 2, 4, 5] },
+  { name: 'minor pentatonic', parent: MINOR_STEPS, pick: [0, 2, 3, 4, 6] },
+  { name: 'blues', parent: MINOR_STEPS, pick: [0, 2, 3, 4, 6], flat: { from: 4, at: 3 } },
+];
+
+// tonic .. tonic-an-octave-up, inclusive
+function scaleOf(root, type) {
+  if (type.steps) return scaleFrom(root, type.steps);
+  const parent = scaleFrom(root, type.parent);
+  const notes = type.pick.map((i) => parent[i]);
+  if (type.flat) {
+    const n = parent[type.flat.from];
+    notes.splice(type.flat.at, 0, { ...n, acc: n.acc - 1 });
+  }
+  notes.push(parent[7]);
+  return notes;
+}
+
 const CIRCLE_MAJORS = ['C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'D♭', 'A♭', 'E♭', 'B♭', 'F'];
 const CIRCLE_MINORS = ['a', 'e', 'b', 'f♯', 'c♯', 'g♯', 'e♭', 'b♭', 'f', 'c', 'g', 'd'];
 const KEY_ROOTS = { // spelled root [letter, acc] per circle key
@@ -176,14 +203,24 @@ function identifyChords(midis) {
       if (f.ints.length === rel.size && f.ints.every(([s]) => rel.has(s))) {
         out.push({ root, formula: f, bass: bass !== root ? bass : null });
       }
+      // the perfect 5th is freely omittable from seventh chords (shells)
+      if (f.ints.length === 4 && f.ints.some(([s]) => s === 7)) {
+        const reduced = f.ints.filter(([s]) => s !== 7);
+        if (reduced.length === rel.size && reduced.every(([s]) => rel.has(s))) {
+          out.push({ root, formula: f, bass: bass !== root ? bass : null, omit5: true });
+        }
+      }
     }
   }
-  // root-position readings first
-  return out.sort((a, b) => (a.bass ? 1 : 0) - (b.bass ? 1 : 0));
+  // exact matches before omitted-5th readings, root position first
+  return out.sort((a, b) =>
+    ((a.omit5 ? 2 : 0) + (a.bass ? 1 : 0)) - ((b.omit5 ? 2 : 0) + (b.bass ? 1 : 0)));
 }
 
 function chordName(match) {
-  return pcName(match.root) + match.formula.sym + (match.bass != null ? '/' + pcName(match.bass) : '');
+  return pcName(match.root) + match.formula.sym
+    + (match.bass != null ? '/' + pcName(match.bass) : '')
+    + (match.omit5 ? ' (no 5th)' : '');
 }
 
 // ---------- voicing search ----------
@@ -862,21 +899,52 @@ function positionBoxes(rootPc, pcs, shapes = CAGED_SHAPES) {
     boxAt(sh.name, Math.max(0, Math.min(...sh.frets.filter((f) => f != null)) - 1), pcs));
 }
 
-// three-note voicings of a triad on the given string sets, named by
-// inversion; sets that cross the irregular pair (G–B on guitar) sort after
-// the regular ones, then low-position first, root position slightly preferred
-function triadVoicings(rootPc, formula, sets) {
-  if (formula.ints.length !== 3) return [];
-  const pcSet = new Set(formula.ints.map(([s]) => mod12(rootPc + s)));
-  const degOf = new Map(formula.ints.map(([s, d]) => [mod12(rootPc + s), d]));
+// does this string set span the tuning's irregular pair (G–B on guitar)?
+function crossesIrregular(set) {
   const gaps = [];
   for (let s = 0; s + 1 < nStr(); s++) gaps.push(STRING_MIDI[s] - STRING_MIDI[s + 1]);
   const majority = gaps.slice().sort((a, b) =>
     gaps.filter((g) => g === b).length - gaps.filter((g) => g === a).length)[0];
-  const crossesIrregular = (set) => {
-    for (let s = set[0]; s < set[set.length - 1]; s++) if (gaps[s] !== majority) return true;
-    return false;
-  };
+  for (let s = set[0]; s < set[set.length - 1]; s++) if (gaps[s] !== majority) return true;
+  return false;
+}
+
+// drill order: regular sets first, bass-most set first, then up the neck
+const byDrill = (x, y) => x.cross - y.cross || y.setTop - x.setTop || x.pos - y.pos;
+// comping order: treble-most set first — where jazz voicings live
+const byTreble = (x, y) => x.setTop - y.setTop || x.pos - y.pos;
+
+// voicing structure, from the sounding pitches: close keeps every voice
+// within an octave; drop 2 / drop 3 lower the 2nd / 3rd voice from the top
+// of the close stack by an octave
+function voicingKind(midis) {
+  const m = [...midis].sort((x, y) => x - y);
+  if (new Set(m).size !== m.length) return null;
+  if (m.length === 3) {
+    const [a, b, c] = m;
+    if (c - a < 12) return 'close';
+    if (c - b < 12 && a + 12 > b) return 'spread (drop 2)';
+    return null;
+  }
+  if (m.length === 4) {
+    const [a, b, c, d] = m;
+    if (d - a < 12) return 'close';
+    if (d - b < 12) {
+      if (a + 12 > c && a + 12 < d) return 'drop 2';
+      if (a + 12 > b && a + 12 < c) return 'drop 3';
+    }
+    return null;
+  }
+  return null;
+}
+
+// three-note voicings of a triad on the given string sets, named by
+// inversion; sets that cross the irregular pair (G–B on guitar) sort after
+// the regular ones, then low-position first
+function triadVoicings(rootPc, formula, sets) {
+  if (formula.ints.length !== 3) return [];
+  const pcSet = new Set(formula.ints.map(([s]) => mod12(rootPc + s)));
+  const degOf = new Map(formula.ints.map(([s, d]) => [mod12(rootPc + s), d]));
   const out = [];
   for (const set of sets) {
     const cands = set.map((s) => {
@@ -903,9 +971,58 @@ function triadVoicings(rootPc, formula, sets) {
       });
     }
   }
-  // regular sets first, bass-most set first, then walk up the neck —
-  // each string set reads as the inversion drill, low to high
-  return out.sort((x, y) => x.cross - y.cross || y.setTop - x.setTop || x.pos - y.pos);
+  return out.sort(byDrill);
+}
+
+// drop-2 / drop-3 / close voicings of a four-tone chord, on four consecutive
+// strings plus the classic drop-3 sets (one skip above the bass string)
+function dropVoicings(rootPc, formula) {
+  if (formula.ints.length !== 4) return [];
+  const pcSet = new Set(formula.ints.map(([s]) => mod12(rootPc + s)));
+  const degOf = new Map(formula.ints.map(([s, d]) => [mod12(rootPc + s), d]));
+  const sets = [];
+  for (let a = 0; a + 3 < nStr(); a++) sets.push([a, a + 1, a + 2, a + 3]);
+  for (let a = 0; a + 4 < nStr(); a++) sets.push([a, a + 1, a + 2, a + 4]);
+  const out = [];
+  for (const set of sets) {
+    const cands = set.map((s) => {
+      const c = [];
+      for (let f = 0; f <= NUM_FRETS; f++) if (pcSet.has(mod12(fretMidi(s, f)))) c.push(f);
+      return c;
+    });
+    for (const f0 of cands[0]) for (const f1 of cands[1]) for (const f2 of cands[2]) for (const f3 of cands[3]) {
+      const fs = [f0, f1, f2, f3];
+      const midis = set.map((s, i) => fretMidi(s, fs[i]));
+      if (new Set(midis.map(mod12)).size !== 4) continue;
+      const fr = fs.filter((f) => f > 0);
+      const span = fr.length ? Math.max(...fr) - Math.min(...fr) : 0;
+      if (span > 4) continue;
+      const kind = voicingKind(midis);
+      if (kind == null) continue;
+      const frets = new Array(nStr()).fill(null);
+      fs.forEach((f, i) => { frets[set[i]] = f; });
+      const bassDeg = degOf.get(mod12(Math.min(...midis)));
+      out.push({
+        kind,
+        name: bassDeg === 1 ? 'root position' : `${DEGREE_NAMES[bassDeg]} in bass`,
+        strings: [...set].reverse().map((s) => STRING_LABELS[s]).join('–'),
+        frets,
+        cross: crossesIrregular(set) ? 1 : 0,
+        setTop: set[0],
+        pos: (fr.length ? Math.min(...fr) : 0) * 10 + span,
+      });
+    }
+  }
+  return out.sort(byTreble);
+}
+
+// shell of a seventh or sixth chord: root, quality tone, and 7th (or 6th) —
+// the 5th dropped
+function shellFormula(formula) {
+  const upper = formula.ints.find(([, d]) => d === 7) ?? formula.ints.find(([, d]) => d === 6);
+  const quality = formula.ints.find(([, d]) => d === 3 || d === 4);
+  if (!upper || !quality || formula.sym === 'dim7') return null;
+  return { ints: [[0, 1], quality, upper] };
 }
 
 // close-position triads on three adjacent strings — the easy portable
