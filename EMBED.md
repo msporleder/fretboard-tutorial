@@ -47,7 +47,7 @@ The Aguado pitch chart (staff run + fret table). Optional `data-note="B"` highli
 
 ### `data-draw="ruler"`
 
-The chromatic degree ruler. Either explicit marks — `data-marks="0:C 4:E 7:G"` (`halfsteps:label`) — or a chord name: `data-chord="Cm"` / `data-chord="F♯maj7"`.
+The chromatic degree ruler. Either explicit marks — `data-marks="0:C 4:E 7:G"` (`halfsteps:label`) — or a chord name: `data-chord="Cm"` / `data-chord="F♯maj7"`. Labels are optional: `data-marks="0 4 7"`, or bare `data-dots` with `data-chord`, draws dots only.
 
 ### `data-draw="circle"`
 
@@ -55,7 +55,7 @@ Circle of 5ths. `data-key="G"` selects a major key; add bare `data-minor` to sel
 
 ### `data-draw="diagram"`
 
-Mini chord chart. `data-frets="x32010"` (see fret strings below), optional `data-root="C"` for octave-colored root dots and `data-label="C shape"` for a caption.
+Mini chord chart. `data-frets="x32010"` (see fret strings below), optional `data-root="C"` for octave-colored root dots and `data-label="C shape"` for a caption. Add bare `data-strings` for a row of string names under the grid, and `data-root-color="#3a5683"` (any CSS color) to override the root dot color. `data-root-color="accent"` uses the page palette's accent, so it follows dark mode. Bare `data-degrees` writes each dot's chord degree inside it (R, ♭3, 3, 5…; needs `data-root`). Bare `data-movable` drops the fret-position label and the nut, for shapes meant to slide anywhere. Bare `data-ghost` adds a faint copy of the dots on every other string set the shape slides to unchanged.
 
 ## value formats
 

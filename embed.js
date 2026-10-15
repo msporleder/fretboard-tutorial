@@ -150,7 +150,7 @@ const EMBED_DRAWERS = {
       const spellByPc = chordSpelling(rootPc, formula);
       marks = formula.ints.map(([s]) => {
         const sp = spellByPc.get(mod12(rootPc + s));
-        return { semis: s, label: LETTERS[sp.letter] + accStr(sp.acc) };
+        return { semis: s, label: "dots" in d ? null : LETTERS[sp.letter] + accStr(sp.acc) };
       });
     }
     drawDegreeRuler(svg, marks);
@@ -163,9 +163,15 @@ const EMBED_DRAWERS = {
   },
 
   diagram(svg, d) {
+    const rootPc = d.root != null ? pcOf(d.root) : null;
     drawChordDiagram(svg, parseFrets(d.frets), {
-      rootPc: d.root != null ? pcOf(d.root) : null,
+      rootPc,
+      colorFor: d.rootColor && rootPc != null ? (m) => (mod12(m) === rootPc ? (d.rootColor === "accent" ? ACCENT : d.rootColor) : null) : undefined,
       label: d.label,
+      stringNames: "strings" in d,
+      ghost: "ghost" in d,
+      degrees: "degrees" in d,
+      movable: "movable" in d,
     });
   },
 };

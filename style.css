@@ -168,7 +168,7 @@ select {
   margin: 0.75rem 0;
 }
 
-#voicings .diagram, .tutorial .diagram, .diagram {
+.diagram {
   width: 98px;
   height: auto;
 }
@@ -202,7 +202,7 @@ main.tutorial h1, main.tutorial > p.lede { text-align: center; }
   font-size: 1.15rem;
   font-weight: normal;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid #ddd8cc;
+  border-bottom: 1px solid var(--line, #ddd8cc);
   padding-bottom: 0.3rem;
 }
 
@@ -222,7 +222,7 @@ main.tutorial h1, main.tutorial > p.lede { text-align: center; }
   font-size: 0.9rem;
 }
 .tutorial th, .tutorial td {
-  border: 1px solid #ddd8cc;
+  border: 1px solid var(--line, #ddd8cc);
   padding: 0.3rem 0.7rem;
   text-align: center;
 }

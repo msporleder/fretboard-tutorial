@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>non-barre mobile chord shapes</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .diagram { width: 150px; }
+  .row { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-start; margin-left: 4.5rem; }
+  .head { display: flex; align-items: center; gap: 1.25rem; }
+  .head h2, .head h3 { margin: 0.6rem 0; }
+  .head h3 { min-width: 3.5rem; }
+  .head svg.small { width: 240px; margin: 0; }
+  section { margin: 1.25rem 0; }
+  .set { display: flex; align-items: center; gap: 1rem; margin: 0.25rem 0; }
+  @media print {
+    @page { margin: 1.5cm; }
+    .set, .row, .head { break-inside: avoid; }
+    .head { break-after: avoid; }
+    .diagram { width: 128px; }
+    html:not(.dark), html:not(.dark) body { background: #fff; }
+    html.dark body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<main class="tutorial">
+  <h1>non-barre mobile chord shapes</h1>
+  <section>
+    <div class="head">
+      <h2>power chords</h2>
+      <svg data-draw="ruler" data-marks="0 7" class="small"></svg>
+    </div>
+    <div class="row">
+      <svg data-draw="diagram" data-frets="1,3,x,x,x,x" data-root="F" data-label="R–5" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="1,3,3,x,x,x" data-root="F" data-label="R–5–R" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="8,8,x,x,x,x" data-root="F" data-label="5–R" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,5,6,x" data-root="F" data-label="5–R" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>major</h2>
+      <svg data-draw="ruler" data-marks="0 4 7" class="small"></svg>
+    </div>
+    <div class="set">
+      <div class="row">
+      <svg data-draw="diagram" data-frets="13,12,10,x,x,x" data-root="F" data-label="root" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="5,3,3,x,x,x" data-root="F" data-label="1st inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="8,8,7,x,x,x" data-root="F" data-label="2nd inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      </div>
+    </div>
+    <div class="set">
+      <div class="row">
+      <svg data-draw="diagram" data-frets="x,x,3,2,1,x" data-root="F" data-label="root" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,7,5,6,x" data-root="F" data-label="1st inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,10,10,10,x" data-root="F" data-label="2nd inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      </div>
+    </div>
+    <div class="set">
+      <div class="row">
+      <svg data-draw="diagram" data-frets="x,x,x,10,10,8" data-root="F" data-label="root" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,2,1,1" data-root="F" data-label="1st inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,5,6,5" data-root="F" data-label="2nd inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>minor — lower the 3 one fret</h2>
+      <svg data-draw="ruler" data-marks="0 3 7" class="small"></svg>
+    </div>
+    <div class="set">
+      <div class="row">
+      <svg data-draw="diagram" data-frets="13,11,10,x,x,x" data-root="F" data-label="root" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="4,3,3,x,x,x" data-root="F" data-label="1st inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="8,8,6,x,x,x" data-root="F" data-label="2nd inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      </div>
+    </div>
+    <div class="set">
+      <div class="row">
+      <svg data-draw="diagram" data-frets="x,x,3,1,1,x" data-root="F" data-label="root" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,6,5,6,x" data-root="F" data-label="1st inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,10,10,9,x" data-root="F" data-label="2nd inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      </div>
+    </div>
+    <div class="set">
+      <div class="row">
+      <svg data-draw="diagram" data-frets="x,x,x,10,9,8" data-root="F" data-label="root" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,1,1,1" data-root="F" data-label="1st inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,5,6,4" data-root="F" data-label="2nd inv" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>shells — no 5th</h2>
+    <div class="head">
+      <h3>maj7</h3>
+      <svg data-draw="ruler" data-marks="0 4 11" class="small"></svg>
+    </div>
+    <div class="row">
+      <svg data-draw="diagram" data-frets="13,12,14,x,x,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,3,2,5,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,10,10,12" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+    </div>
+    <div class="head">
+      <h3>7</h3>
+      <svg data-draw="ruler" data-marks="0 4 10" class="small"></svg>
+    </div>
+    <div class="row">
+      <svg data-draw="diagram" data-frets="13,12,13,x,x,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,3,2,4,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,10,10,11" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+    </div>
+    <div class="head">
+      <h3>m7</h3>
+      <svg data-draw="ruler" data-marks="0 3 10" class="small"></svg>
+    </div>
+    <div class="row">
+      <svg data-draw="diagram" data-frets="13,11,13,x,x,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,3,1,4,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,10,9,11" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+    </div>
+    <div class="head">
+      <h3>6</h3>
+      <svg data-draw="ruler" data-marks="0 4 9" class="small"></svg>
+    </div>
+    <div class="row">
+      <svg data-draw="diagram" data-frets="13,12,12,x,x,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,3,2,3,x" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+      <svg data-draw="diagram" data-frets="x,x,x,10,10,10" data-root="F" data-strings data-ghost data-degrees data-movable data-root-color="accent" class="diagram"></svg>
+    </div>
+  </section>
+
+</main>
+<script src="core.js"></script>
+<script>
+  if (new URLSearchParams(location.search).has("dark")) {
+    usePalette("dark");
+    document.documentElement.classList.add("dark");
+  }
+</script>
+<script src="embed.js"></script>
+</body>
+</html>

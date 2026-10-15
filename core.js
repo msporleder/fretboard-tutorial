@@ -9,6 +9,36 @@ let ACCENT = '#b0413e';
 let MUTED = '#6e6a5e';
 let PAPER = '#faf8f2';
 let OCTAVE_COLORS = ['#b0413e', '#4a6fa5', '#2e7d32', '#a8742c'];
+// secondary drawing colors: ruler shading/lines, frets, inlays, faint rules,
+// small natural/accidental name text
+let SHADE = '#eee9dd', RULE = '#c9c4b6', FRET = '#9a9488', INLAY = '#ddd8cc';
+let FAINT = '#e4dfd2', NAT_TEXT = '#5a564c', ACC_TEXT = '#8f8a7c';
+
+const LIGHT_EXTRAS = {
+  shade: '#eee9dd', rule: '#c9c4b6', fret: '#9a9488', inlay: '#ddd8cc',
+  faint: '#e4dfd2', natural: '#5a564c', accidental: '#8f8a7c',
+};
+const PALETTES = {
+  dark: {
+    ink: '#e9e5d9', paper: '#17191d', accent: '#e5675d', muted: '#a09b8e',
+    octaves: ['#e5675d', '#6f9be0', '#5fb36a', '#d9a24a'],
+    shade: '#2b2e35', rule: '#4b4f58', fret: '#6b6f78', inlay: '#3a3e46',
+    faint: '#2c2f35', natural: '#c9c5b8', accidental: '#8a867b',
+  },
+};
+
+// apply a palette (object or PALETTES name) to drawing and the page's CSS vars
+function setPalette(p) {
+  if (typeof p === 'string') p = PALETTES[p];
+  p = { ...LIGHT_EXTRAS, ...p };
+  ({ ink: INK, paper: PAPER, accent: ACCENT, muted: MUTED, octaves: OCTAVE_COLORS } = p);
+  ({ shade: SHADE, rule: RULE, fret: FRET, inlay: INLAY, faint: FAINT, natural: NAT_TEXT, accidental: ACC_TEXT } = p);
+  if (typeof document !== 'undefined') {
+    const root = document.documentElement.style;
+    for (const k of ['ink', 'paper', 'accent', 'muted']) root.setProperty('--' + k, p[k]);
+    root.setProperty('--line', p.inlay);
+  }
+}
 
 const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 const LETTER_PC = [0, 2, 4, 5, 7, 9, 11];
@@ -289,7 +319,7 @@ function drawDegreeRuler(svg, marks, opts = {}) {
   for (let i = 0; i <= 12; i++) {
     const x = x0 + i * cw;
     const dia = DIATONIC_SEMIS.has(i);
-    svg.appendChild(el('rect', { x, y: y0, width: cw, height: h, fill: dia ? '#eee9dd' : 'none', stroke: '#c9c4b6', 'stroke-width': 0.8 }));
+    svg.appendChild(el('rect', { x, y: y0, width: cw, height: h, fill: dia ? SHADE : 'none', stroke: RULE, 'stroke-width': 0.8 }));
     const label = RULER_LABELS[i];
     const t = txt({
       x: x + cw / 2, y: y0 - 6, 'font-size': dia ? 11 : 9.5,
@@ -337,9 +367,20 @@ function drawDegreeRuler(svg, marks, opts = {}) {
 // frets: array[6] high-e-first; each entry is null (muted), a fret number, or
 // an array of fret numbers (scale boxes). opts.rootPc colors root dots by
 // octave; opts.label draws a caption underneath (use a taller viewBox)
+// string windows of the same size and tuning gaps as [lo..hi] (high-first
+// indices) — a shape on one fits all of them unchanged
+function equivalentSets(lo, hi) {
+  const gaps = (a, b) => { const g = []; for (let s = b; s > a; s--) g.push(STRING_MIDI[s - 1] - STRING_MIDI[s]); return g.join(','); };
+  const want = gaps(lo, hi), w = hi - lo, out = [];
+  for (let b = nStr() - 1; b - w >= 0; b--) if (gaps(b - w, b) === want) out.push([b - w, b]);
+  return out;
+}
+
 function drawChordDiagram(svg, frets, opts = {}) {
   svg.innerHTML = '';
-  const x0 = 30, dx = 11, y0 = 20, dy = 14;
+  const dx = 11, y0 = 20, dy = 14;
+  const W = 94;
+  const n = frets.length;
   const perString = frets.map((f) => (f == null ? null : Array.isArray(f) ? f : [f]));
   const fretted = perString.flatMap((fs) => fs ?? []).filter((f) => f > 0);
   // an open string anchors the window at the nut, however far the frets reach
@@ -347,31 +388,75 @@ function drawChordDiagram(svg, frets, opts = {}) {
   const start = fretted.length && Math.max(...fretted) > 4 && !hasOpen ? Math.min(...fretted) : 1;
   const rows = Math.max(4, (fretted.length ? Math.max(...fretted) : 0) - start + 1);
   const rootColor = opts.rootPc != null ? octaveColorFor(opts.rootPc) : () => null;
-  // size to the actual grid so tall (nut-anchored) shapes never clip
-  svg.setAttribute('viewBox', `0 0 94 ${y0 + rows * dy + (opts.label ? 21 : 7)}`);
 
-  const n = frets.length;
+  // opts.stringNames: a row of open-string names under the grid
+  const sounded = perString.map((fs, s) => (fs == null ? null : s)).filter((s) => s != null);
+  const lo = 0;
+  const hi = n - 1;
+  const cols = hi - lo + 1;
+  const x0 = 30;
+  const colX = (s) => x0 + (hi - s) * dx;
+  const nameSets = opts.stringNames ? [[0, n - 1]] : [];
+  const namesH = nameSets.length ? 3 + nameSets.length * 9 : 0;
+  // size to the actual grid so tall (nut-anchored) shapes never clip
+  svg.setAttribute('viewBox', `0 0 ${W} ${y0 + rows * dy + namesH + (opts.label ? 21 : 7)}`);
+
+  nameSets.forEach(([a, b], i) => {
+    for (let k = 0; k <= b - a; k++) {
+      svg.appendChild(txt({
+        x: colX(hi - k), y: y0 + rows * dy + 10 + i * 9, 'font-size': 8, fill: MUTED,
+        'font-style': 'italic', 'text-anchor': 'middle',
+      }, STRING_LABELS[b - k]));
+    }
+  });
   if (opts.label) {
     svg.appendChild(txt({
-      x: x0 + ((n - 1) / 2) * dx, y: y0 + rows * dy + 15, 'font-size': 11, fill: MUTED,
+      x: x0 + ((cols - 1) / 2) * dx, y: y0 + rows * dy + namesH + 15, 'font-size': opts.label.length > 11 ? 9.5 : 11, fill: MUTED,
       'font-style': 'italic', 'text-anchor': 'middle',
     }, opts.label));
   }
 
-  for (let s = 0; s < n; s++) {
-    const x = x0 + (n - 1 - s) * dx;
+  for (let s = lo; s <= hi; s++) {
+    const x = colX(s);
     svg.appendChild(el('line', { x1: x, y1: y0, x2: x, y2: y0 + rows * dy, stroke: INK, 'stroke-width': 0.8 }));
   }
   for (let r = 0; r <= rows; r++) {
-    const w = r === 0 && start === 1 ? 3 : 0.8;
-    svg.appendChild(el('line', { x1: x0, y1: y0 + r * dy, x2: x0 + (n - 1) * dx, y2: y0 + r * dy, stroke: INK, 'stroke-width': w }));
+    const w = r === 0 && start === 1 && !opts.movable ? 3 : 0.8; // movable shapes have no nut
+    svg.appendChild(el('line', { x1: colX(hi), y1: y0 + r * dy, x2: colX(lo), y2: y0 + r * dy, stroke: INK, 'stroke-width': w }));
   }
-  if (start > 1) {
-    svg.appendChild(txt({ x: x0 - 5, y: y0 + dy * 0.5 + 3, 'font-size': 10, fill: MUTED, 'text-anchor': 'end' }, start + 'fr'));
+  if (start > 1 && !opts.movable) {
+    svg.appendChild(txt({ x: x0 - 7.5, y: y0 + dy * 0.5 + 3, 'font-size': 10, fill: MUTED, 'text-anchor': 'end' }, start + 'fr'));
   }
 
-  for (let s = 0; s < n; s++) {
-    const x = x0 + (n - 1 - s) * dx;
+  // opts.ghost: a faint copy of the shape on every other string set with the
+  // same tuning intervals (the shape slides there unchanged)
+  if (opts.ghost && sounded.length) {
+    const sLo = Math.min(...sounded), sHi = Math.max(...sounded);
+    for (const [a] of equivalentSets(sLo, sHi)) {
+      const shift = sLo - a;
+      if (shift === 0) continue;
+      // join each copy's dots so copies read as units (and gaps between them show)
+      const pts = [];
+      for (const s of [...sounded].sort((x, y) => y - x)) {
+        for (const f of perString[s]) {
+          const m = fretMidi(s, f);
+          pts.push([colX(s - shift), f === 0 ? y0 - 8 : y0 + (f - start + 0.5) * dy, opts.colorFor?.(m) ?? rootColor(m) ?? MUTED]);
+        }
+      }
+      if (pts.length > 1) {
+        svg.appendChild(el('polyline', {
+          points: pts.map(([x, y]) => x + ',' + y).join(' '), fill: 'none',
+          stroke: MUTED, 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.45,
+        }));
+      }
+      for (const [cx, cy, color] of pts) {
+        svg.appendChild(el('circle', { cx, cy, r: 3.2, fill: color, opacity: 0.6 }));
+      }
+    }
+  }
+
+  for (let s = lo; s <= hi; s++) {
+    const x = colX(s);
     const fs = perString[s];
     if (fs == null) {
       svg.appendChild(txt({ x, y: y0 - 4.5, 'font-size': 10, fill: MUTED, 'text-anchor': 'middle' }, '×'));
@@ -381,12 +466,26 @@ function drawChordDiagram(svg, frets, opts = {}) {
       const midi = fretMidi(s, f);
       const color = opts.colorFor?.(midi) ?? rootColor(midi) ?? INK;
       const ring = opts.hollowFor?.(midi);
-      if (f === 0) {
-        svg.appendChild(el('circle', { cx: x, cy: y0 - 8, r: 3.4, fill: 'none', stroke: color, 'stroke-width': 1.3 }));
+      // opts.degrees: write the chord degree (1, ♭3, 5…) inside each dot
+      const deg = opts.degrees && opts.rootPc != null ? DEGREE_LABELS[mod12(midi - opts.rootPc)] : null;
+      const cy = f === 0 ? y0 - 8 : y0 + (f - start + 0.5) * dy;
+      if (deg) {
+        const r = 5.5;
+        if (f === 0 || ring) {
+          svg.appendChild(el('circle', { cx: x, cy, r, fill: PAPER, stroke: color, 'stroke-width': 1.2 }));
+        } else {
+          svg.appendChild(el('circle', { cx: x, cy, r, fill: color }));
+        }
+        svg.appendChild(txt({
+          x, y: cy + 2.2, 'font-size': deg.length > 1 ? 5.4 : 6.5, 'font-weight': 'bold',
+          fill: f === 0 || ring ? color : PAPER, 'text-anchor': 'middle',
+        }, deg));
+      } else if (f === 0) {
+        svg.appendChild(el('circle', { cx: x, cy, r: 3.4, fill: 'none', stroke: color, 'stroke-width': 1.3 }));
       } else if (ring) {
-        svg.appendChild(el('circle', { cx: x, cy: y0 + (f - start + 0.5) * dy, r: 4.2, fill: 'none', stroke: color, 'stroke-width': 1.6 }));
+        svg.appendChild(el('circle', { cx: x, cy, r: 4.2, fill: 'none', stroke: color, 'stroke-width': 1.6 }));
       } else {
-        svg.appendChild(el('circle', { cx: x, cy: y0 + (f - start + 0.5) * dy, r: 4.5, fill: color }));
+        svg.appendChild(el('circle', { cx: x, cy, r: 4.5, fill: color }));
       }
     }
   }
@@ -444,15 +543,14 @@ function setInstrument(name) {
   STRING_MIDI = INSTRUMENT.strings;
   STRING_LABELS = INSTRUMENT.labels;
   STAFF_BOT_DIA = INSTRUMENT.staffBotDia;
-  const p = INSTRUMENT.palette;
-  ({ ink: INK, paper: PAPER, accent: ACCENT, muted: MUTED, octaves: OCTAVE_COLORS } = p);
-  if (typeof document !== 'undefined') {
-    const root = document.documentElement.style;
-    root.setProperty('--ink', p.ink);
-    root.setProperty('--paper', p.paper);
-    root.setProperty('--accent', p.accent);
-    root.setProperty('--muted', p.muted);
-  }
+  setPalette(PALETTE_CHOICE ?? INSTRUMENT.palette);
+}
+
+// a page-chosen palette (e.g. 'dark') that survives instrument switches
+let PALETTE_CHOICE = null;
+function usePalette(p) {
+  PALETTE_CHOICE = p;
+  setPalette(p);
 }
 
 const nStr = () => STRING_MIDI.length;
@@ -478,16 +576,16 @@ function drawFretboard(svg, opts = {}) {
   // nut + frets
   svg.appendChild(el('rect', { x: FB.nutX - 4, y: yTop - 2, width: 5, height: yBot - yTop + 4, fill: INK }));
   for (let f = 1; f <= NUM_FRETS; f++) {
-    svg.appendChild(el('line', { x1: fretX(f), y1: yTop, x2: fretX(f), y2: yBot, stroke: '#9a9488', 'stroke-width': 1.6 }));
+    svg.appendChild(el('line', { x1: fretX(f), y1: yTop, x2: fretX(f), y2: yBot, stroke: FRET, 'stroke-width': 1.6 }));
   }
 
   // inlay dots
   const midY = (yTop + yBot) / 2;
   for (const f of [3, 5, 7, 9]) {
-    svg.appendChild(el('circle', { cx: noteX(f), cy: midY, r: 5, fill: '#ddd8cc' }));
+    svg.appendChild(el('circle', { cx: noteX(f), cy: midY, r: 5, fill: INLAY }));
   }
   for (const y of [midY - FB.gap, midY + FB.gap]) {
-    svg.appendChild(el('circle', { cx: noteX(12), cy: y, r: 5, fill: '#ddd8cc' }));
+    svg.appendChild(el('circle', { cx: noteX(12), cy: y, r: 5, fill: INLAY }));
   }
 
   // strings + tuning labels
@@ -511,7 +609,7 @@ function drawFretboard(svg, opts = {}) {
         const natural = sp.acc === 0;
         svg.appendChild(txt({
           x: noteX(f), y: stringY(s) + 3.5, 'font-size': natural ? 10.5 : 9,
-          fill: natural ? '#5a564c' : '#8f8a7c', 'text-anchor': 'middle',
+          fill: natural ? NAT_TEXT : ACC_TEXT, 'text-anchor': 'middle',
           stroke: PAPER, 'stroke-width': 3, 'paint-order': 'stroke',
         }, spelledName(sp)));
       }
@@ -588,8 +686,8 @@ function markersForPcs(spellByPc, rootPc, labels = 'names') {
 function drawCircle(svg, opts = {}) {
   svg.innerHTML = '';
   const cx = 160, cy = 160, rMaj = 118, rMin = 74;
-  svg.appendChild(el('circle', { cx, cy, r: rMaj, fill: 'none', stroke: '#ddd8cc', 'stroke-width': 1 }));
-  svg.appendChild(el('circle', { cx, cy, r: rMin, fill: 'none', stroke: '#eee9dd', 'stroke-width': 1 }));
+  svg.appendChild(el('circle', { cx, cy, r: rMaj, fill: 'none', stroke: INLAY, 'stroke-width': 1 }));
+  svg.appendChild(el('circle', { cx, cy, r: rMin, fill: 'none', stroke: SHADE, 'stroke-width': 1 }));
 
   for (let k = 0; k < 12; k++) {
     const slot = opts.fourths ? (12 - k) % 12 : k;
@@ -770,7 +868,7 @@ function drawPitchChart(svg, opts = {}) {
     if (hl) {
       svg.appendChild(el('rect', { x, y: 2, width: cw, height: rowY(n - 1) + 8, fill: hl, opacity: 0.12 }));
     }
-    svg.appendChild(el('line', { x1: x, y1: 16, x2: x, y2: rowY(n - 1) + 6, stroke: '#e4dfd2', 'stroke-width': midi % 12 === 0 ? 1.6 : 0.7 }));
+    svg.appendChild(el('line', { x1: x, y1: 16, x2: x, y2: rowY(n - 1) + 6, stroke: FAINT, 'stroke-width': midi % 12 === 0 ? 1.6 : 0.7 }));
   }
 
   // staff lines across the chart
@@ -795,7 +893,7 @@ function drawPitchChart(svg, opts = {}) {
     // header name; octave digit shown on naturals to keep columns narrow
     svg.appendChild(txt({
       x: xm, y: 12, 'font-size': natural ? 9.5 : 8,
-      fill: hl ?? (natural ? '#5a564c' : '#8f8a7c'), 'text-anchor': 'middle',
+      fill: hl ?? (natural ? NAT_TEXT : ACC_TEXT), 'text-anchor': 'middle',
     }, natural ? spelledName(sp) + sp.octave : spelledName(sp)));
 
     // notehead (written pitch), short ledgers, tiny accidental
@@ -823,7 +921,7 @@ function drawPitchChart(svg, opts = {}) {
   // string row labels
   for (let s = 0; s < n; s++) {
     svg.appendChild(txt({ x: x0 - 10, y: rowY(s) + 4, 'font-size': 10, fill: MUTED, 'font-style': 'italic', 'text-anchor': 'end' }, STRING_LABELS[s]));
-    svg.appendChild(el('line', { x1: x0 - 4, y1: rowY(s) - 7, x2: colX(HI) + cw, y2: rowY(s) - 7, stroke: '#eee9dd', 'stroke-width': 0.7 }));
+    svg.appendChild(el('line', { x1: x0 - 4, y1: rowY(s) - 7, x2: colX(HI) + cw, y2: rowY(s) - 7, stroke: SHADE, 'stroke-width': 0.7 }));
   }
 
   if (opts.onClick) {
