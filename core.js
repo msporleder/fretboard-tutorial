@@ -397,14 +397,26 @@ function drawChordDiagram(svg, frets, opts = {}) {
   const x0 = 30;
   const colX = (s) => x0 + (hi - s) * dx;
   const nameSets = opts.stringNames ? [[0, n - 1]] : [];
-  const namesH = nameSets.length ? 3 + nameSets.length * 9 : 0;
+  // opts.fingers: left-hand finger per string (or per dot, parallel to an
+  // array of frets) — inside the dots, or in a row under the grid when the
+  // dots already carry degrees
+  const fingerAt = (s, k) => { const fg = opts.fingers?.[s]; return Array.isArray(fg) ? fg[k] : fg; };
+  const fingerRow = opts.fingers && opts.degrees;
+  const fingersH = fingerRow ? 11 : 0;
+  const namesH = (nameSets.length ? 3 + nameSets.length * 9 : 0) + fingersH;
   // size to the actual grid so tall (nut-anchored) shapes never clip
   svg.setAttribute('viewBox', `0 0 ${W} ${y0 + rows * dy + namesH + (opts.label ? 21 : 7)}`);
 
+  if (fingerRow) {
+    for (let s = lo; s <= hi; s++) {
+      const fg = fingerAt(s);
+      if (fg != null) svg.appendChild(txt({ x: colX(s), y: y0 + rows * dy + 10, 'font-size': 8, fill: INK, 'text-anchor': 'middle' }, String(fg)));
+    }
+  }
   nameSets.forEach(([a, b], i) => {
     for (let k = 0; k <= b - a; k++) {
       svg.appendChild(txt({
-        x: colX(hi - k), y: y0 + rows * dy + 10 + i * 9, 'font-size': 8, fill: MUTED,
+        x: colX(hi - k), y: y0 + rows * dy + fingersH + 10 + i * 9, 'font-size': 8, fill: MUTED,
         'font-style': 'italic', 'text-anchor': 'middle',
       }, STRING_LABELS[b - k]));
     }
@@ -455,6 +467,15 @@ function drawChordDiagram(svg, frets, opts = {}) {
     }
   }
 
+  // opts.barre: {f, from, to} — the index laid across strings, behind the dots
+  if (opts.barre) {
+    const { f, from, to } = opts.barre;
+    svg.appendChild(el('rect', {
+      x: colX(to) - 5, y: y0 + (f - start + 0.5) * dy - 4, width: colX(from) - colX(to) + 10, height: 8,
+      rx: 4, fill: MUTED, opacity: 0.45,
+    }));
+  }
+
   for (let s = lo; s <= hi; s++) {
     const x = colX(s);
     const fs = perString[s];
@@ -462,7 +483,7 @@ function drawChordDiagram(svg, frets, opts = {}) {
       svg.appendChild(txt({ x, y: y0 - 4.5, 'font-size': 10, fill: MUTED, 'text-anchor': 'middle' }, '×'));
       continue;
     }
-    for (const f of fs) {
+    for (const [k, f] of fs.entries()) {
       const midi = fretMidi(s, f);
       const color = opts.colorFor?.(midi) ?? rootColor(midi) ?? INK;
       const ring = opts.hollowFor?.(midi);
@@ -484,6 +505,9 @@ function drawChordDiagram(svg, frets, opts = {}) {
         svg.appendChild(el('circle', { cx: x, cy, r: 3.4, fill: 'none', stroke: color, 'stroke-width': 1.3 }));
       } else if (ring) {
         svg.appendChild(el('circle', { cx: x, cy, r: 4.2, fill: 'none', stroke: color, 'stroke-width': 1.6 }));
+      } else if (fingerAt(s, k) != null) {
+        svg.appendChild(el('circle', { cx: x, cy, r: 5.2, fill: color }));
+        svg.appendChild(txt({ x, y: cy + 2.3, 'font-size': 6.5, 'font-weight': 'bold', fill: PAPER, 'text-anchor': 'middle' }, String(fingerAt(s, k))));
       } else {
         svg.appendChild(el('circle', { cx: x, cy, r: 4.5, fill: color }));
       }
@@ -565,7 +589,8 @@ function noteX(f) { return f === 0 ? FB.nutX - 24 : (fretX(f - 1) + fretX(f)) / 
 function stringY(s) { return FB.top + s * FB.gap; }
 function fretMidi(s, f) { return STRING_MIDI[s] + f; }
 
-// opts: { names, markers: [{s, f, label, fill, hollow}], onClick(s, f) }
+// opts: { names, markers: [{s, f, label, fill, hollow}], box: {lo, hi}, onClick(s, f) }
+// box: a fret window; its edge frets are drawn in the accent color
 function drawFretboard(svg, opts = {}) {
   svg.innerHTML = '';
   const n = nStr();
@@ -575,8 +600,12 @@ function drawFretboard(svg, opts = {}) {
 
   // nut + frets
   svg.appendChild(el('rect', { x: FB.nutX - 4, y: yTop - 2, width: 5, height: yBot - yTop + 4, fill: INK }));
+  const edges = opts.box ? [opts.box.lo - 1, opts.box.hi] : [];
   for (let f = 1; f <= NUM_FRETS; f++) {
-    svg.appendChild(el('line', { x1: fretX(f), y1: yTop, x2: fretX(f), y2: yBot, stroke: FRET, 'stroke-width': 1.6 }));
+    const edge = edges.includes(f);
+    svg.appendChild(el('line', {
+      x1: fretX(f), y1: yTop, x2: fretX(f), y2: yBot, stroke: edge ? ACCENT : FRET, 'stroke-width': edge ? 3 : 1.6,
+    }));
   }
 
   // inlay dots
@@ -995,6 +1024,101 @@ function positionBoxes(rootPc, pcs, shapes = CAGED_SHAPES) {
   }
   return cagedShapes(rootPc, shapes).map((sh) =>
     boxAt(sh.name, Math.max(0, Math.min(...sh.frets.filter((f) => f != null)) - 1), pcs));
+}
+
+// the chords of a seven-note scale, stacked in 3rds from each degree;
+// stacks with no named formula (e.g. augmented maj7) are left out
+const NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+const NUMERAL_SUFFIX = { dim: '°', aug: '+', maj7: 'maj7', 7: '7', m7: '7', 'm7♭5': 'ø7', dim7: '°7', mMaj7: 'maj7' };
+function diatonicChords(scale, sevenths) {
+  if (scale.length !== 8) return [];
+  const notes = scale.slice(0, 7);
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const root = notes[i];
+    const rootMidi = spelledToMidi(root);
+    const stack = (sevenths ? [0, 2, 4, 6] : [0, 2, 4]).map((k) => notes[(i + k) % 7]);
+    const rel = stack.map((n) => mod12(spelledToMidi(n) - rootMidi));
+    const formula = CHORD_FORMULAS.find((f) =>
+      f.ints.length === rel.length && f.ints.every(([s], k) => s === rel[k]));
+    if (!formula) continue;
+    const numeral = (rel[1] === 3 ? NUMERALS[i].toLowerCase() : NUMERALS[i]) + (NUMERAL_SUFFIX[formula.sym] ?? '');
+    out.push({ degree: i, numeral, rootPc: mod12(rootMidi), name: spelledName(root) + formula.sym, formula, tones: stack });
+  }
+  return out;
+}
+
+// every grip of a chord that fits inside a position box: root in the bass
+// first, then the most strings, then the tightest hand. Open strings count
+// only in a nut box.
+function gripsInBox(rootPc, formula, box) {
+  const fits = (f) => f == null || (f >= box.wLo && f <= box.wHi && (f > 0 || box.wLo === 0));
+  const sounding = (fr) => fr.filter((f) => f != null).length;
+  const span = (fr) => {
+    const fs = fr.filter((f) => f != null && f > 0);
+    return fs.length ? Math.max(...fs) - Math.min(...fs) : 0;
+  };
+  const bassIsRoot = (fr) => {
+    let lo = Infinity;
+    fr.forEach((f, s) => { if (f != null) lo = Math.min(lo, fretMidi(s, f)); });
+    return mod12(lo) === rootPc;
+  };
+  const fit = voicings(rootPc, formula).map((v) => v.frets)
+    .filter((fr) => fr.every(fits) && gripFingers(fr)); // four fingers (and a bar) can hold it
+  return fit.sort((a, b) => (bassIsRoot(b) - bassIsRoot(a)) || sounding(b) - sounding(a) || span(a) - span(b));
+}
+function chordInBox(rootPc, formula, box) { return gripsInBox(rootPc, formula, box)[0] ?? null; }
+
+// left-hand fingers for a grip (null = open or muted): fingers in order,
+// lowest fret first, bass string first within a fret. When four fingers
+// aren't enough, one finger bars a whole fret — the lowest that works, and
+// only if no string under the bar sits lower.
+// Returns { fingers, barre: {f, from, to} | null }, or null if unplayable.
+function gripFingers(frets) {
+  const notes = frets.map((f, s) => ({ s, f })).filter((n) => n.f != null && n.f > 0)
+    .sort((a, b) => a.f - b.f || b.s - a.s);
+  const assign = (barreF) => {
+    const out = frets.map(() => null);
+    let next = 1, bar = null;
+    for (const n of notes) {
+      if (n.f === barreF && bar != null) { out[n.s] = bar; continue; }
+      if (next > 4) return null;
+      out[n.s] = next++;
+      if (n.f === barreF) bar = out[n.s];
+    }
+    return out;
+  };
+  const plain = assign(null);
+  if (plain) return { fingers: plain, barre: null };
+  for (const f of new Set(notes.map((n) => n.f))) {
+    const under = notes.filter((n) => n.f === f).map((n) => n.s);
+    if (under.length < 2) continue;
+    const from = Math.min(...under), to = Math.max(...under);
+    let clear = true;
+    for (let s = from; s <= to; s++) if (!(frets[s] >= f)) clear = false; // bar would stop an open, muted or lower string
+    const barred = clear && assign(f);
+    if (barred) return { fingers: barred, barre: { f, from, to } };
+  }
+  return null;
+}
+
+// one finger per fret through a position box: the index sits on the box's
+// lowest fret or one up, whichever holds more notes; notes outside the hand
+// stretch to 1 or 4, and the fingers beside a stretch shift to make room so
+// two notes on one string never share a finger. Open strings: null.
+function boxFingers(box) {
+  const all = box.frets.flat().filter((f) => f > 0);
+  const inHand = (p) => all.filter((f) => f >= p && f <= p + 3).length;
+  const p = Math.max(1, inHand(box.wLo) >= inHand(box.wLo + 1) ? box.wLo : box.wLo + 1);
+  return box.frets.map((fs) => {
+    const out = fs.map((f) => (f === 0 ? null : f - p + 1));
+    const idx = out.map((_, i) => i).filter((i) => out[i] != null);
+    idx.forEach((i, k) => { out[i] = Math.max(out[i], 1, k ? out[idx[k - 1]] + 1 : 1); });
+    for (let k = idx.length - 1; k >= 0; k--) {
+      out[idx[k]] = Math.min(out[idx[k]], 4, k < idx.length - 1 ? out[idx[k + 1]] - 1 : 4);
+    }
+    return out;
+  });
 }
 
 // does this string set span the tuning's irregular pair (G–B on guitar)?

@@ -151,6 +151,14 @@ select {
   color: var(--muted);
   font-style: italic;
 }
+#voicings .vlink {
+  padding: 0 0.5rem;
+  margin-left: 0.4rem;
+  font-size: 0.8rem;
+  font-style: normal;
+  color: var(--accent);
+  border-color: var(--accent);
+}
 
 #ruler {
   display: block;

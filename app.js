@@ -20,6 +20,7 @@ const st = {
   scaleType: 0,                             // circle mode: SCALE_TYPES index
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
   circleLabels: 'names',                    // circle mode: names|degrees
+  circleChord: '',                          // circle mode: diatonic chord key ('' | degree | degree+'7')
   root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
   frets: new Array(nStr()).fill(null),         // chord mode: fret per string, null = muted
   placing: null,                               // chord mode: pc awaiting a position choice
@@ -28,7 +29,7 @@ const st = {
 
 const HINTS = {
   notes: 'click a note to light it up everywhere',
-  circle: 'click a key (inner ring: minors) or a position box',
+  circle: 'click a key (inner ring: minors) or a position box; pick a chord to see it in each box',
   intervals: 'click a root, then a second note',
   chords: 'select and browse shapes, or click to build chords',
 };
@@ -126,18 +127,81 @@ function renderCircle() {
   const boxes = positionBoxes(rootPc, pcs, minorish ? CAGED_MINOR_SHAPES : CAGED_SHAPES);
   if (st.circlePos != null && st.circlePos >= boxes.length) st.circlePos = null;
 
-  // big fretboard: everything, or one numbered position box
+  // diatonic chord picker; the choice is a degree, so it follows key changes
+  const chords = INSTRUMENT.chords
+    ? [false, true].flatMap((sev) => diatonicChords(scale, sev).map((c) => ({ ...c, key: c.degree + (sev ? '7' : '') })))
+    : [];
+  const chordSel = $('circlechord');
+  chordSel.hidden = !chords.length;
+  chordSel.innerHTML = '<option value="">chord: —</option>';
+  for (const [label, sev] of [['triads', false], ['7ths', true]]) {
+    const grp = document.createElement('optgroup');
+    grp.label = label;
+    for (const c of chords.filter((c) => c.key.endsWith('7') === sev)) {
+      const o = document.createElement('option');
+      o.value = c.key;
+      o.textContent = `${c.numeral}  ${c.name}`;
+      grp.appendChild(o);
+    }
+    if (grp.children.length) chordSel.appendChild(grp);
+  }
+  const chord = chords.find((c) => c.key === st.circleChord) ?? null;
+  chordSel.value = chord ? chord.key : '';
+  const chordPcs = chord ? new Set(chord.tones.map((n) => mod12(spelledToMidi(n)))) : null;
+  const gripIn = (box) => (chord ? chordInBox(chord.rootPc, chord.formula, box) : null);
+  // big-neck labels: note name, degree above `degRoot`, or left-hand finger
+  // (0 = open). Fingers need a hand position, so the whole neck shows names.
+  const labels = st.circleLabels === 'fingers' && st.circlePos == null ? 'names' : st.circleLabels;
+  const spellAll = new Map([...spellByPc, ...(chord ? chord.tones.map((n) => [mod12(spelledToMidi(n)), n]) : [])]);
+  const labelAt = (s, f, degRoot, finger) => {
+    const midi = fretMidi(s, f);
+    if (labels === 'fingers') return f === 0 ? '0' : String(finger ?? '');
+    if (labels === 'degrees') return DEGREE_LABELS[mod12(midi - degRoot)];
+    return sciName(spellAtMidi(midi, spellAll.get(mod12(midi))));
+  };
+  const chordMarker = (s, f, c, fingers) => {
+    const midi = fretMidi(s, f);
+    return { s, f, label: labelAt(s, f, c.rootPc, fingers?.[s]), fill: octaveColorFor(c.rootPc)(midi) ?? INK };
+  };
+
+  // big fretboard: everything, or one position box. A chosen chord stands
+  // out solid; the rest of the scale fades to rings
   if (st.circlePos == null) {
-    drawFretboard(fbSvg, { markers: markersForPcs(spellByPc, rootPc, st.circleLabels) });
+    const all = markersForPcs(spellByPc, rootPc, labels);
+    drawFretboard(fbSvg, {
+      markers: chord
+        ? [...all.filter((m) => !chordPcs.has(mod12(fretMidi(m.s, m.f)))).map((m) => ({ ...m, dot: true, fill: MUTED })),
+           ...markersForPcs(new Map(chord.tones.map((n) => [mod12(spelledToMidi(n)), n])), chord.rootPc, labels)]
+        : all,
+    });
   } else {
     const box = boxes[st.circlePos];
     const notes = [];
     for (let s = nStr() - 1; s >= 0; s--) for (const f of box.frets[s]) notes.push({ s, f, midi: fretMidi(s, f) });
-    notes.sort((a, b) => a.midi - b.midi);
     const rootColor = octaveColorFor(rootPc);
-    drawFretboard(fbSvg, {
-      markers: notes.map((n, i) => ({ s: n.s, f: n.f, label: String(i + 1), fill: rootColor(n.midi) ?? INK })),
-    });
+    if (chord) {
+      const grip = gripIn(box);
+      const gripHand = grip && gripFingers(grip)?.fingers;
+      const inGrip = (n) => (grip ? grip[n.s] === n.f : chordPcs.has(mod12(n.midi)));
+      drawFretboard(fbSvg, {
+        box: { lo: box.wLo, hi: box.wHi },
+        markers: [
+          ...notes.filter((n) => !inGrip(n)).map((n) => ({ s: n.s, f: n.f, dot: true, fill: MUTED })),
+          ...(grip
+            ? grip.flatMap((f, s) => (f == null ? [] : [chordMarker(s, f, chord, gripHand)]))
+            : notes.filter(inGrip).map((n) => chordMarker(n.s, n.f, chord))),
+        ],
+      });
+    } else {
+      const hand = boxFingers(box);
+      drawFretboard(fbSvg, {
+        box: { lo: box.wLo, hi: box.wHi },
+        markers: notes.map((n) => ({
+          s: n.s, f: n.f, fill: rootColor(n.midi) ?? INK,
+          label: labelAt(n.s, n.f, rootPc, hand[n.s][box.frets[n.s].indexOf(n.f)]),
+        })),
+      });
+    }
   }
 
   const name = `${spelledName(root)} ${type.name}`;
@@ -151,8 +215,12 @@ function renderCircle() {
   }
   if (st.circlePos != null) {
     const box = boxes[st.circlePos];
-    html += `<br>around the ${box.name}, frets ${box.wLo}–${box.wHi} — numbered low to high`;
+    html += `<br>around the ${box.name}, frets ${box.wLo}–${box.wHi}`
+      + (chord && !gripIn(box) ? ` — no full ${chord.name} grip here` : '');
+  } else if (st.circleLabels === 'fingers') {
+    html += '<br><span class="muted">pick a position box to see fingers</span>';
   }
+  if (chord) html += `<br>${chord.numeral} <b>${chord.name}</b> — ${chord.tones.map(spelledName).join(' ')}`;
   infoEl.innerHTML = html;
 
   const staffNotes = arp
@@ -166,17 +234,40 @@ function renderCircle() {
   vbox.innerHTML = '';
   const lbl = document.createElement('div');
   lbl.className = 'vlabel';
-  lbl.textContent = `${arp ? 'arpeggio' : 'scale'} positions`;
+  lbl.textContent = `${arp ? 'arpeggio' : 'scale'} positions `;
+  if (st.circlePos != null) {
+    const all = document.createElement('button');
+    all.className = 'vlink';
+    all.textContent = 'whole neck';
+    all.addEventListener('click', () => { st.circlePos = null; render(); });
+    lbl.appendChild(all);
+  }
   vbox.appendChild(lbl);
-  boxes.forEach((b, i) => {
+  const addBoxDiagram = (frets, i, opts) => {
     const svg = el('svg', { class: 'diagram' + (i === st.circlePos ? ' sel' : '') });
-    drawChordDiagram(svg, b.frets, { rootPc, label: b.name });
+    drawChordDiagram(svg, frets, opts);
     svg.addEventListener('click', () => {
       st.circlePos = st.circlePos === i ? null : i;
       render();
     });
     vbox.appendChild(svg);
-  });
+  };
+  boxes.forEach((b, i) => addBoxDiagram(b.frets, i, { rootPc, label: b.name, fingers: boxFingers(b) }));
+
+  // grips inside each position, with left-hand fingers (and barre) underneath
+  const gripRow = (label, c, gripOf) => {
+    const clbl = document.createElement('div');
+    clbl.className = 'vlabel';
+    clbl.textContent = label;
+    vbox.appendChild(clbl);
+    boxes.forEach((b, i) => {
+      const grip = gripOf(b);
+      if (!grip) return;
+      const hand = gripFingers(grip);
+      addBoxDiagram(grip, i, { rootPc: c.rootPc, label: b.name, degrees: true, fingers: hand?.fingers, barre: hand?.barre });
+    });
+  };
+  if (chord) gripRow(`${chord.name} in each position`, chord, gripIn);
 
   setStaff(true); setCircle(true); setVoicings(true); setRuler(false); setChart(false);
 }
@@ -683,19 +774,36 @@ document.addEventListener('click', (ev) => {
 $('shownames').addEventListener('change', (e) => { st.showNames = e.target.checked; render(); });
 $('accpref').addEventListener('change', (e) => { st.accPref = e.target.value; render(); });
 
-SCALE_TYPES.forEach((t, i) => {
-  const o = document.createElement('option');
-  o.value = String(i);
-  o.textContent = t.name;
-  $('scaletype').appendChild(o);
-});
+// on chord instruments, group the scales by whether they stack into chords
+{
+  const groups = INSTRUMENT.chords
+    ? [['with chords', (t) => t.steps], ['scale only', (t) => !t.steps]]
+    : [[null, () => true]];
+  for (const [label, keep] of groups) {
+    const parent = label ? document.createElement('optgroup') : $('scaletype');
+    if (label) parent.label = label;
+    SCALE_TYPES.forEach((t, i) => {
+      if (!keep(t)) return;
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = t.name;
+      parent.appendChild(o);
+    });
+    if (label) $('scaletype').appendChild(parent);
+  }
+}
 $('scaletype').addEventListener('change', (e) => {
   st.scaleType = parseInt(e.target.value, 10);
   st.circlePos = null;
   render();
 });
 $('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
-$('circlelabels').addEventListener('change', (e) => { st.circleLabels = e.target.value; render(); });
+$('circlechord').addEventListener('change', (e) => { st.circleChord = e.target.value; render(); });
+$('circlelabels').addEventListener('change', (e) => {
+  st.circleLabels = e.target.value;
+  if (st.circleLabels === 'fingers' && st.circlePos == null) st.circlePos = 0; // fingers need a hand position
+  render();
+});
 
 $('degree').addEventListener('change', (e) => {
   st.degree = parseInt(e.target.value, 10);

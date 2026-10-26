@@ -149,6 +149,57 @@ assert(spelledName(majorScale(keyRoot(1, 3))[5]) === "E", "relative minor of G")
     });
   }
 }
+// diatonic chords: C major triads and 7ths
+{
+  const sc = majorScale(keyRoot(0, 3));
+  const tri = diatonicChords(sc, false).map((c) => c.numeral + ' ' + c.name).join(', ');
+  assert(tri === "I C, ii Dm, iii Em, IV F, V G, vi Am, vii° Bdim", "C triads: " + tri);
+  const sev = diatonicChords(sc, true).map((c) => c.numeral + ' ' + c.name).join(', ');
+  assert(sev === "Imaj7 Cmaj7, ii7 Dm7, iii7 Em7, IVmaj7 Fmaj7, V7 G7, vi7 Am7, viiø7 Bm7♭5", "C 7ths: " + sev);
+  assert(diatonicChords(scaleOf(keyRoot(0, 3), SCALE_TYPES.find((t) => t.name === 'major pentatonic')), false).length === 0,
+    "no stacked 3rds for pentatonics");
+  // F♯ major keeps key spelling: vii° is E♯dim
+  assert(diatonicChords(majorScale(keyRoot(6, 3)), false)[6].name === "E♯dim", "F# vii spelling");
+}
+// chord in each box: every grip in its window, chord tones only; the tonic
+// in C major lands on the CAGED shapes
+{
+  const sc = majorScale(keyRoot(0, 3));
+  const pcs = new Set(sc.slice(0, 7).map((n) => mod12(spelledToMidi(n))));
+  const boxes = positionBoxes(0, pcs);
+  for (const c of [...diatonicChords(sc, false), ...diatonicChords(sc, true)]) {
+    const cpcs = new Set(c.formula.ints.map(([s]) => mod12(c.rootPc + s)));
+    for (const b of boxes) {
+      const grip = chordInBox(c.rootPc, c.formula, b);
+      if (!grip) continue;
+      grip.forEach((f, s) => {
+        if (f == null) return;
+        assert(f >= b.wLo && f <= b.wHi && cpcs.has(mod12(fretMidi(s, f))), `grip ${c.name} ${b.name} ${s}/${f}`);
+      });
+    }
+  }
+  const tonic = boxes.slice(0, 4).map((b) => chordInBox(0, CHORD_FORMULAS[0], b).join(','));
+  const caged = cagedShapes(0).slice(0, 4).map((s) => s.frets.join(','));
+  assert(tonic.join(' ') === caged.join(' '), "C grips = CAGED: " + tonic.join(' '));
+}
+// left-hand fingers: open shapes in order, barres when four aren't enough
+{
+  const fg = (fr) => JSON.stringify(gripFingers(fr));
+  assert(fg([0, 1, 0, 2, 3, null]) === JSON.stringify({ fingers: [null, 1, null, 2, 3, null], barre: null }), "open C fingers");
+  assert(fg([2, 3, 2, 0, null, null]) === JSON.stringify({ fingers: [2, 3, 1, null, null, null], barre: null }), "open D fingers");
+  assert(fg([8, 8, 9, 10, 10, 8]) === JSON.stringify({ fingers: [1, 1, 2, 4, 3, 1], barre: { f: 8, from: 0, to: 5 } }), "E-shape barre");
+  assert(fg([3, 5, 5, 5, 3, null]) === JSON.stringify({ fingers: [1, 4, 3, 2, 1, null], barre: { f: 3, from: 0, to: 4 } }), "A-shape barre");
+  assert(gripFingers([1, 0, 1, 2, 3, 4]) === null, "no barre over an open string");
+  // scale boxes: per string, fingers rise and stay within 1–4
+  const sc = majorScale(keyRoot(0, 3));
+  const pcs = new Set(sc.slice(0, 7).map((n) => mod12(spelledToMidi(n))));
+  for (const b of positionBoxes(0, pcs)) {
+    boxFingers(b).forEach((fs, s) => {
+      const held = fs.filter((x) => x != null);
+      assert(held.every((x, i) => x >= 1 && x <= 4 && (i === 0 || x > held[i - 1])), `box fingers ${b.name} s=${s}: ${fs}`);
+    });
+  }
+}
 // ---------- bass ----------
 setInstrument('bass');
 assert(nStr() === 4 && fretMidi(3, 0) === 28 && fretMidi(0, 12) === 55, "bass tuning");
