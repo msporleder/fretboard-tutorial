@@ -19,7 +19,8 @@ const st = {
   keyIdx: 0, fourths: false, minor: false,  // circle mode
   scaleType: 0,                             // circle mode: SCALE_TYPES index
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
-  circleLabels: 'names',                    // circle mode: names|degrees
+  circleLabels: 'names',                    // circle mode: names|degrees|fingers
+  preFingerLabels: 'names',                 // circle mode: labels to return to off a box
   circleChord: '',                          // circle mode: diatonic chord key ('' | degree | degree+'7')
   root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
   frets: new Array(nStr()).fill(null),         // chord mode: fret per string, null = muted
@@ -98,7 +99,6 @@ function renderCircle() {
     onClick: (k, isMinor) => {
       st.keyIdx = k;
       st.minor = isMinor;
-      st.circlePos = null;
       if (isMinor) { // inner ring is the relative-minor shortcut
         st.scaleType = SCALE_TYPES.findIndex((t) => t.name === 'minor');
         $('scaletype').value = String(st.scaleType);
@@ -150,8 +150,13 @@ function renderCircle() {
   const chordPcs = chord ? new Set(chord.tones.map((n) => mod12(spelledToMidi(n)))) : null;
   const gripIn = (box) => (chord ? chordInBox(chord.rootPc, chord.formula, box) : null);
   // big-neck labels: note name, degree above `degRoot`, or left-hand finger
-  // (0 = open). Fingers need a hand position, so the whole neck shows names.
-  const labels = st.circleLabels === 'fingers' && st.circlePos == null ? 'names' : st.circleLabels;
+  // (0 = open). Fingers need a hand position: leaving the box goes back to
+  // the labels from before fingers, and the picker says so.
+  if (st.circleLabels === 'fingers' && st.circlePos == null) {
+    st.circleLabels = st.preFingerLabels;
+    $('circlelabels').value = st.circleLabels;
+  }
+  const labels = st.circleLabels;
   const spellAll = new Map([...spellByPc, ...(chord ? chord.tones.map((n) => [mod12(spelledToMidi(n)), n]) : [])]);
   const labelAt = (s, f, degRoot, finger) => {
     const midi = fretMidi(s, f);
@@ -217,8 +222,6 @@ function renderCircle() {
     const box = boxes[st.circlePos];
     html += `<br>around the ${box.name}, frets ${box.wLo}–${box.wHi}`
       + (chord && !gripIn(box) ? ` — no full ${chord.name} grip here` : '');
-  } else if (st.circleLabels === 'fingers') {
-    html += '<br><span class="muted">pick a position box to see fingers</span>';
   }
   if (chord) html += `<br>${chord.numeral} <b>${chord.name}</b> — ${chord.tones.map(spelledName).join(' ')}`;
   infoEl.innerHTML = html;
@@ -755,12 +758,40 @@ function render() {
   hintEl.textContent = HINTS[mode];
   $('modelabel').textContent = document.querySelector(`#modes button[data-mode="${mode}"]`).textContent.toLowerCase();
   RENDERERS[mode]();
+  writeUrl();
+}
+
+// shareable state: the mode, then any non-default fields from this list,
+// ride in the hash — #circle&scaleType=2&circlePos=1&circleLabels=fingers
+const URL_STATE = ['showNames', 'accPref', 'keyIdx', 'fourths', 'minor', 'scaleType',
+  'circleShow', 'circlePos', 'circleLabels', 'circleChord'];
+const DEFAULTS = Object.fromEntries(URL_STATE.map((k) => [k, st[k]]));
+function writeUrl() {
+  const p = new URLSearchParams();
+  for (const k of URL_STATE) if (st[k] !== DEFAULTS[k]) p.set(k, st[k] ?? '');
+  const q = p.toString();
+  history.replaceState(null, '', location.pathname + location.search + '#' + mode + (q ? '&' + q : ''));
+}
+function readUrl(p) {
+  for (const k of URL_STATE) {
+    if (!p.has(k)) continue;
+    const v = p.get(k), d = DEFAULTS[k];
+    st[k] = k === 'circlePos' ? (v === '' ? null : Number(v))
+      : typeof d === 'boolean' ? v === 'true'
+      : typeof d === 'number' ? Number(v)
+      : v;
+  }
+  // controls built from fixed option lists follow the state
+  $('shownames').checked = st.showNames;
+  $('accpref').value = st.accPref;
+  $('scaletype').value = String(st.scaleType);
+  $('circleshow').value = st.circleShow;
+  $('circlelabels').value = st.circleLabels;
 }
 
 for (const btn of document.querySelectorAll('#modes button')) {
   btn.addEventListener('click', () => {
     mode = btn.dataset.mode;
-    history.replaceState(null, '', '#' + mode);
     $('modes').classList.remove('open');
     render();
   });
@@ -794,12 +825,12 @@ $('accpref').addEventListener('change', (e) => { st.accPref = e.target.value; re
 }
 $('scaletype').addEventListener('change', (e) => {
   st.scaleType = parseInt(e.target.value, 10);
-  st.circlePos = null;
   render();
 });
 $('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
 $('circlechord').addEventListener('change', (e) => { st.circleChord = e.target.value; render(); });
 $('circlelabels').addEventListener('change', (e) => {
+  if (e.target.value === 'fingers' && st.circleLabels !== 'fingers') st.preFingerLabels = st.circleLabels;
   st.circleLabels = e.target.value;
   if (st.circleLabels === 'fingers' && st.circlePos == null) st.circlePos = 0; // fingers need a hand position
   render();
@@ -864,11 +895,12 @@ instSel.value = INSTRUMENT === INSTRUMENTS.bass ? 'bass' : 'guitar';
 instSel.addEventListener('change', (e) => {
   const u = new URL(location);
   u.searchParams.set('inst', e.target.value);
-  location.href = u; // reload with fresh per-instrument state
+  location.href = u; // reload for the new instrument; hash state carries over
 });
 
-const hash = location.hash.slice(1);
+const [hashMode, ...hashState] = location.hash.slice(1).split('&');
 const alias = { chord: 'chords', finder: 'chords' }; // pre-merge bookmarks
-if (RENDERERS[alias[hash] ?? hash]) mode = alias[hash] ?? hash;
+if (RENDERERS[alias[hashMode] ?? hashMode]) mode = alias[hashMode] ?? hashMode;
+readUrl(new URLSearchParams(hashState.join('&')));
 rebuildQualitySelect();
 render();
