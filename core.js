@@ -552,7 +552,7 @@ const INSTRUMENTS = {
   guitar: {
     strings: [64, 59, 55, 50, 45, 40], labels: ['e', 'B', 'G', 'D', 'A', 'E'],
     clef: 'treble', staffBotDia: 30,   // bottom staff line: written E4
-    chart: [40, 81],                   // pitch chart, sounding E2..A5 (17th fret)
+    chart: [40, 79],                   // pitch chart, sounding E2..G5 (15th fret)
     scaleOctave: 3, rootMax: 57,       // circle-mode register
     arpBase: 48,                       // finder arpeggio root (C3)
     chords: true,                      // chord builder/finder + CAGED live here
@@ -564,7 +564,7 @@ const INSTRUMENTS = {
   bass: {
     strings: [43, 38, 33, 28], labels: ['G', 'D', 'A', 'E'],
     clef: 'bass', staffBotDia: 18,     // bottom staff line: written G2
-    chart: [28, 60],                   // sounding E1..C4 (17th fret)
+    chart: [28, 58],                   // sounding E1..B♭3 (15th fret)
     scaleOctave: 2, rootMax: 40, // keep circle-mode roots low: E1..E2
     arpBase: 36,                       // C2
     chords: false,                     // single-note instrument; CAGED is six-string
@@ -599,7 +599,7 @@ const nStr = () => STRING_MIDI.length;
 
 // ---------- fretboard rendering ----------
 
-const NUM_FRETS = 17;
+const NUM_FRETS = 15;
 const FB = { nutX: 56, top: 30, gap: 26, scale: 1560 };
 
 function fretX(f) { return FB.nutX + FB.scale * (1 - 2 ** (-f / 12)); }
