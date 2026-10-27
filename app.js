@@ -16,11 +16,11 @@ const hintEl = $('hint');
 let mode = 'notes';
 const st = {
   showNames: true, selPc: null, accPref: 'sharp', // notes mode
-  keyIdx: 0, fourths: false, minor: false,  // circle mode
+  tonic: 0, fourths: false,                 // circle mode: tonic pc; the ring highlight follows scaleType
   scaleType: 0,                             // circle mode: SCALE_TYPES index
   circleShow: 'scale', circlePos: null,     // circle mode: scale|arp, selected box
-  circleLabels: 'names',                    // circle mode: names|degrees|fingers
-  preFingerLabels: 'names',                 // circle mode: labels to return to off a box
+  circleLabels: 'names',                    // circle mode: names|degrees
+  circleFingers: false,                     // circle mode: left-hand fingers inside a box
   circleChord: '',                          // circle mode: diatonic chord key ('' | degree | degree+'7')
   root: null, target: null, degree: 3, quality: 'M', dir: 1, // interval mode: root/target = {s, f}
   frets: new Array(nStr()).fill(null),         // chord mode: fret per string, null = muted
@@ -92,31 +92,29 @@ function renderNotes() {
 // ---------- circle mode ----------
 
 function renderCircle() {
+  // the tonic is a pitch class; a minor-flavored scale lights the inner ring
+  // and spells from it, anything else the outer. Clicking a ring sets the
+  // flavor too, so what's lit is always what's drawn
+  const type = SCALE_TYPES[st.scaleType];
+  const minorish = isMinorType(type);
+  const keyIdx = ringKeyIdx(st.tonic, minorish);
   drawCircle(circleSvg, {
     fourths: st.fourths,
-    selected: st.minor ? null : st.keyIdx,
-    minorSelected: st.minor ? st.keyIdx : null,
+    selected: minorish ? null : keyIdx,
+    minorSelected: minorish ? keyIdx : null,
     onClick: (k, isMinor) => {
-      st.keyIdx = k;
-      st.minor = isMinor;
-      if (isMinor) { // inner ring is the relative-minor shortcut
-        st.scaleType = SCALE_TYPES.findIndex((t) => t.name === 'minor');
-        $('scaletype').value = String(st.scaleType);
-      }
+      st.tonic = mod12(spelledToMidi(ringRoot(k, isMinor, 3)));
+      if (isMinor !== minorish) st.scaleType = SCALE_TYPES.findIndex((t) => t.name === (isMinor ? 'minor' : 'major'));
       render();
     },
     onToggle: () => { st.fourths = !st.fourths; render(); },
   });
 
-  // the ring picks the tonic (inner = relative minor), kept in staff range
-  const majRoot = keyRoot(st.keyIdx, INSTRUMENT.scaleOctave);
-  let root = st.minor ? majorScale(majRoot)[5] : majRoot;
+  let root = ringRoot(keyIdx, minorish, INSTRUMENT.scaleOctave); // kept in staff range
   if (spelledToMidi(root) > INSTRUMENT.rootMax) root = { ...root, octave: root.octave - 1 };
-  const rootPc = mod12(spelledToMidi(root));
-  const type = SCALE_TYPES[st.scaleType];
+  const rootPc = st.tonic;
   const scale = scaleOf(root, type);
   const scalePcs = scale.slice(0, -1);
-  const minorish = scalePcs.some((n) => mod12(spelledToMidi(n) - rootPc) === 3);
 
   const arp = st.circleShow === 'arp';
   const triad = CHORD_FORMULAS[minorish ? 1 : 0];
@@ -149,24 +147,22 @@ function renderCircle() {
   chordSel.value = chord ? chord.key : '';
   const chordPcs = chord ? new Set(chord.tones.map((n) => mod12(spelledToMidi(n)))) : null;
   const gripIn = (box) => (chord ? chordInBox(chord.rootPc, chord.formula, box) : null);
-  // big-neck labels: note name, degree above `degRoot`, or left-hand finger
-  // (0 = open). Fingers need a hand position: leaving the box goes back to
-  // the labels from before fingers, and the picker says so.
-  if (st.circleLabels === 'fingers' && st.circlePos == null) {
-    st.circleLabels = st.preFingerLabels;
-    $('circlelabels').value = st.circleLabels;
-  }
+  // big-neck labels: note name or degree above `degRoot`; inside a box the
+  // fingers toggle writes the left-hand finger instead (0 = open) wherever
+  // one is known
   const labels = st.circleLabels;
+  const fingers = st.circleFingers && st.circlePos != null;
   const spellAll = new Map([...spellByPc, ...(chord ? chord.tones.map((n) => [mod12(spelledToMidi(n)), n]) : [])]);
   const labelAt = (s, f, degRoot, finger) => {
     const midi = fretMidi(s, f);
-    if (labels === 'fingers') return f === 0 ? '0' : String(finger ?? '');
+    if (fingers && f === 0) return '0';
+    if (fingers && finger != null) return String(finger);
     if (labels === 'degrees') return DEGREE_LABELS[mod12(midi - degRoot)];
     return sciName(spellAtMidi(midi, spellAll.get(mod12(midi))));
   };
-  const chordMarker = (s, f, c, fingers) => {
+  const chordMarker = (s, f, c, hand) => {
     const midi = fretMidi(s, f);
-    return { s, f, label: labelAt(s, f, c.rootPc, fingers?.[s]), fill: octaveColorFor(c.rootPc)(midi) ?? INK };
+    return { s, f, label: labelAt(s, f, c.rootPc, hand?.[s]), fill: octaveColorFor(c.rootPc)(midi) ?? INK };
   };
 
   // big fretboard: everything, or one position box. A chosen chord stands
@@ -215,8 +211,8 @@ function renderCircle() {
     : scalePcs.map(spelledName);
   let html = `<b>${name}</b> — ${tones.join(' ')}`;
   if (type.name === 'major' || type.name === 'minor') {
-    html += ` <span class="muted">(relative ${st.minor ? 'major' : 'minor'}: `
-      + `${st.minor ? CIRCLE_MAJORS[st.keyIdx] : CIRCLE_MINORS[st.keyIdx]})</span>`;
+    html += ` <span class="muted">(relative ${minorish ? 'major' : 'minor'}: `
+      + `${minorish ? CIRCLE_MAJORS[keyIdx] : CIRCLE_MINORS[keyIdx]})</span>`;
   }
   if (st.circlePos != null) {
     const box = boxes[st.circlePos];
@@ -272,6 +268,9 @@ function renderCircle() {
   };
   if (chord) gripRow(`${chord.name} in each position`, chord, gripIn);
 
+  // fingers need a hand position: the toggle greys out until a box is picked
+  $('circlefingers').disabled = st.circlePos == null;
+  $('circlefingers-wrap').title = st.circlePos == null ? 'pick a position box' : '';
   setStaff(true); setCircle(true); setVoicings(true); setRuler(false); setChart(false);
 }
 
@@ -310,9 +309,6 @@ function setTargetFromClick(s, f) {
   st.quality = q;
   st.dir = d > 0 ? 1 : -1;
   st.target = { s, f };
-  $('degree').value = String(deg);
-  rebuildQualitySelect();
-  $('dir').value = String(st.dir);
 }
 
 // standard words for a fretboard move: higher/lower strings (pitch-wise),
@@ -372,14 +368,16 @@ function renderInterval() {
       colors: [INK, targetColor(spelledToMidi(target)) ?? ACCENT],
     });
 
-    // ruler: target slot measured upward from the root; a downward interval
-    // lands on its inversion (major 3rd down = minor 6th up to the same pc)
-    const slot = st.dir > 0 ? semis : (12 - semis) % 12;
+    // ruler: target slot measured upward from the root, within one octave.
+    // A downward interval lands on its inversion (major 3rd down = minor 6th
+    // up to the same pc); past the octave (augmented octave) it folds down
+    const slot = st.dir > 0 ? (semis > 12 ? semis - 12 : semis) : mod12(-semis);
     const marks = [{ semis: 0, label: spelledName(root) }];
     if (slot !== 0) marks.push({ semis: slot, label: spelledName(target) });
     drawDegreeRuler(rulerSvg, marks, { onClick: rulerSetInterval });
-    if (st.dir < 0 && slot !== 0) {
-      html += `<br><span class="muted">on the ruler: ${semitoneName(slot)} up to the same pitch class — the inversion</span>`;
+    if (slot !== 0 && slot !== semis) {
+      html += `<br><span class="muted">on the ruler: ${semitoneName(slot)} up to the same pitch class`
+        + `${st.dir < 0 ? ' — the inversion' : ''}</span>`;
     }
   } else {
     drawStaffNotes(staffSvg, []);
@@ -428,7 +426,6 @@ function renderInterval() {
       st.root = { ...sh.root };
       st.target = { ...sh.target };
       st.dir = 1;
-      $('dir').value = '1';
       render();
     });
     box.appendChild(svg);
@@ -445,9 +442,6 @@ function rulerSetInterval(i) {
   st.quality = q;
   st.dir = 1;
   st.target = null;
-  $('degree').value = String(deg);
-  rebuildQualitySelect();
-  $('dir').value = '1';
   render();
 }
 
@@ -535,10 +529,8 @@ function renderChords() {
       });
       html += `<br>from ${pcName(best.root)}: ${fromRoot.join(', ')}`;
       const kind = voicingKind(midis);
-      html += `<br>chord: <b>${chordName(best)}</b> <span class="muted">(${spelled.join(' ')})${kind ? ' · ' + kind : ''}</span>`;
-      if (matches.length > 1) {
-        html += `<br><span class="muted">also reads as: ${matches.slice(1, 4).map(chordName).join(', ')}</span>`;
-      }
+      html += `<br>chord: <b>${chordName(best)}</b> <span class="muted">(${spelled.join(' ')})${kind ? ' · ' + kind : ''}`
+        + `${matches.length > 1 ? ' · also reads as ' + matches.slice(1, 4).map(chordName).join(', ') : ''}</span>`;
     } else if (new Set(midis.map(mod12)).size >= 3) {
       html += `<br><span class="muted">no standard chord name for this one</span>`;
     }
@@ -757,36 +749,55 @@ function render() {
   }
   hintEl.textContent = HINTS[mode];
   $('modelabel').textContent = document.querySelector(`#modes button[data-mode="${mode}"]`).textContent.toLowerCase();
+  syncControls();
   RENDERERS[mode]();
   writeUrl();
 }
 
-// shareable state: the mode, then any non-default fields from this list,
-// ride in the hash — #circle&scaleType=2&circlePos=1&circleLabels=fingers
-const URL_STATE = ['showNames', 'accPref', 'keyIdx', 'fourths', 'minor', 'scaleType',
-  'circleShow', 'circlePos', 'circleLabels', 'circleChord'];
-const DEFAULTS = Object.fromEntries(URL_STATE.map((k) => [k, st[k]]));
-function writeUrl() {
-  const p = new URLSearchParams();
-  for (const k of URL_STATE) if (st[k] !== DEFAULTS[k]) p.set(k, st[k] ?? '');
-  const q = p.toString();
-  history.replaceState(null, '', location.pathname + location.search + '#' + mode + (q ? '&' + q : ''));
-}
-function readUrl(p) {
-  for (const k of URL_STATE) {
-    if (!p.has(k)) continue;
-    const v = p.get(k), d = DEFAULTS[k];
-    st[k] = k === 'circlePos' ? (v === '' ? null : Number(v))
-      : typeof d === 'boolean' ? v === 'true'
-      : typeof d === 'number' ? Number(v)
-      : v;
-  }
-  // controls built from fixed option lists follow the state
+// the controls show the state, never the other way round: handlers only
+// write `st` and call render(), and this is the one place select values are set
+function syncControls() {
   $('shownames').checked = st.showNames;
   $('accpref').value = st.accPref;
   $('scaletype').value = String(st.scaleType);
   $('circleshow').value = st.circleShow;
   $('circlelabels').value = st.circleLabels;
+  $('circlefingers').checked = st.circleFingers;
+  $('degree').value = String(st.degree);
+  rebuildQualitySelect();
+  $('dir').value = String(st.dir);
+  $('chordroot').value = st.finderRoot == null ? '' : String(st.finderRoot);
+  $('chordtype').value = String(st.finderType);
+}
+
+// shareable state: the mode, then any non-default fields, ride in the hash —
+// #circle&scaleType=2&circlePos=1&circleFingers=true. Each field has a parser
+// that returns undefined for anything out of range, so a mangled hash falls
+// back to the default instead of crashing a renderer
+const bool = (v) => (v === 'true' ? true : v === 'false' ? false : undefined);
+const oneOf = (xs) => (v) => (xs.includes(v) ? v : undefined);
+const int = (lo, hi) => (v) => { const n = Number(v); return Number.isInteger(n) && n >= lo && n <= hi ? n : undefined; };
+const URL_STATE = {
+  showNames: bool, accPref: oneOf(['sharp', 'flat']),
+  tonic: int(0, 11), fourths: bool, scaleType: int(0, SCALE_TYPES.length - 1),
+  circleShow: oneOf(['scale', 'arp']),
+  circlePos: (v) => (v === '' ? null : int(0, 11)(v)), // renderCircle drops it if past the last box
+  circleLabels: oneOf(['names', 'degrees']), circleFingers: bool,
+  circleChord: (v) => (/^([0-6]7?)?$/.test(v) ? v : undefined),
+};
+const DEFAULTS = Object.fromEntries(Object.keys(URL_STATE).map((k) => [k, st[k]]));
+function writeUrl() {
+  const p = new URLSearchParams();
+  for (const k of Object.keys(URL_STATE)) if (st[k] !== DEFAULTS[k]) p.set(k, st[k] ?? '');
+  const q = p.toString();
+  history.replaceState(null, '', location.pathname + location.search + '#' + mode + (q ? '&' + q : ''));
+}
+function readUrl(p) {
+  for (const [k, parse] of Object.entries(URL_STATE)) {
+    if (!p.has(k)) continue;
+    const v = parse(p.get(k));
+    if (v !== undefined) st[k] = v;
+  }
 }
 
 for (const btn of document.querySelectorAll('#modes button')) {
@@ -829,17 +840,12 @@ $('scaletype').addEventListener('change', (e) => {
 });
 $('circleshow').addEventListener('change', (e) => { st.circleShow = e.target.value; render(); });
 $('circlechord').addEventListener('change', (e) => { st.circleChord = e.target.value; render(); });
-$('circlelabels').addEventListener('change', (e) => {
-  if (e.target.value === 'fingers' && st.circleLabels !== 'fingers') st.preFingerLabels = st.circleLabels;
-  st.circleLabels = e.target.value;
-  if (st.circleLabels === 'fingers' && st.circlePos == null) st.circlePos = 0; // fingers need a hand position
-  render();
-});
+$('circlelabels').addEventListener('change', (e) => { st.circleLabels = e.target.value; render(); });
+$('circlefingers').addEventListener('change', (e) => { st.circleFingers = e.target.checked; render(); });
 
 $('degree').addEventListener('change', (e) => {
   st.degree = parseInt(e.target.value, 10);
   st.target = null;
-  rebuildQualitySelect();
   render();
 });
 $('quality').addEventListener('change', (e) => { st.quality = e.target.value; st.target = null; render(); });
@@ -859,7 +865,6 @@ for (let pc = 0; pc < 12; pc++) {
   o.textContent = pcName(pc);
   $('chordroot').appendChild(o);
 }
-$('chordroot').value = '0'; // default browse: C
 CHORD_FORMULAS.forEach((f, i) => {
   const o = document.createElement('option');
   o.value = String(i);
@@ -902,5 +907,4 @@ const [hashMode, ...hashState] = location.hash.slice(1).split('&');
 const alias = { chord: 'chords', finder: 'chords' }; // pre-merge bookmarks
 if (RENDERERS[alias[hashMode] ?? hashMode]) mode = alias[hashMode] ?? hashMode;
 readUrl(new URLSearchParams(hashState.join('&')));
-rebuildQualitySelect();
 render();

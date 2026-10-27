@@ -246,7 +246,6 @@ setInstrument('guitar');
   assert(spreadTriads(0, CHORD_FORMULAS.find((f) => f.sym === '7')).length === 0, "no spreads for 7ths");
 }
 
-console.log(process.exitCode ? "TESTS FAILED" : "all tests passed");
 // closed triads: three adjacent strings, all tones
 {
   const closed = closedTriads(0, CHORD_FORMULAS[0]);
@@ -352,3 +351,20 @@ assert(shellFormula(CHORD_FORMULAS.find((f) => f.sym === 'add9')) === null, "no 
     assert(spelledToMidi(sc[sc.length - 1]) - spelledToMidi(sc[0]) === 12, "octave closes: " + t.name);
   }
 }
+// circle rings: every pc has a slot in both rings, the inner one is the
+// relative minor, and scale flavor decides the ring
+{
+  for (let pc = 0; pc < 12; pc++) {
+    for (const minor of [false, true]) {
+      const k = ringKeyIdx(pc, minor);
+      assert(mod12(spelledToMidi(ringRoot(k, minor, 3))) === pc, `ring slot for pc ${pc} minor=${minor}`);
+    }
+  }
+  assert(spelledName(ringRoot(0, true, 3)) === 'A' && spelledName(ringRoot(9, true, 3)) === 'C', "inner ring is the relative minor");
+  assert(spelledName(ringRoot(ringKeyIdx(1, true), true, 3)) === 'C♯', "pc 1 spells C♯ from the minor ring");
+  assert(spelledName(ringRoot(ringKeyIdx(1, false), false, 3)) === 'D♭', "pc 1 spells D♭ from the major ring");
+  const flavor = SCALE_TYPES.map((t) => t.name + ':' + (isMinorType(t) ? 'm' : 'M')).join(' ');
+  assert(flavor === 'major:M minor:m dorian:m mixolydian:M harmonic minor:m melodic minor:m major pentatonic:M minor pentatonic:m blues:m',
+    "scale flavors: " + flavor);
+}
+console.log(process.exitCode ? "TESTS FAILED" : "all tests passed");

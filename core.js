@@ -184,6 +184,24 @@ function keyRoot(keyIdx, octave) {
   return { letter, acc, octave };
 }
 
+// spelled tonic of a ring slot: outer ring (majors) or inner (relative minors)
+function ringRoot(keyIdx, minor, octave) {
+  const maj = keyRoot(keyIdx, octave);
+  return minor ? majorScale(maj)[5] : maj;
+}
+
+// ring slot whose tonic is this pitch class (every pc lives in both rings)
+function ringKeyIdx(pc, minor) {
+  for (let k = 0; k < 12; k++) if (mod12(spelledToMidi(ringRoot(k, minor, 3))) === pc) return k;
+  return 0;
+}
+
+// does a scale type carry a minor 3rd? decides which ring spells the tonic
+// and which CAGED family boxes it
+function isMinorType(type) {
+  return scaleOf({ letter: 0, acc: 0, octave: 3 }, type).some((n) => mod12(spelledToMidi(n)) === 3);
+}
+
 // ---------- chords ----------
 
 // ints: [semitones above root, scale degree used to spell it]

@@ -107,6 +107,8 @@ select {
   padding: 0.3rem;
 }
 
+#controls label:has(input:disabled) { color: var(--muted); opacity: 0.6; }
+
 #hint {
   font-size: 0.85rem;
   color: var(--muted);
