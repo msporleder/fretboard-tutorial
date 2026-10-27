@@ -367,4 +367,14 @@ assert(shellFormula(CHORD_FORMULAS.find((f) => f.sym === 'add9')) === null, "no 
   assert(flavor === 'major:M minor:m dorian:m mixolydian:M harmonic minor:m melodic minor:m major pentatonic:M minor pentatonic:m blues:m',
     "scale flavors: " + flavor);
 }
+// every position box, in every key and both CAGED families, sits on the neck
+{
+  for (const shapes of [CAGED_SHAPES, CAGED_MINOR_SHAPES]) {
+    for (let pc = 0; pc < 12; pc++) {
+      for (const b of positionBoxes(pc, new Set([pc, mod12(pc + 4), mod12(pc + 7)]), shapes)) {
+        assert(b.wHi <= NUM_FRETS, `box ${b.name} for pc ${pc} runs to fret ${b.wHi}`);
+      }
+    }
+  }
+}
 console.log(process.exitCode ? "TESTS FAILED" : "all tests passed");

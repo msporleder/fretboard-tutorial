@@ -552,7 +552,7 @@ const INSTRUMENTS = {
   guitar: {
     strings: [64, 59, 55, 50, 45, 40], labels: ['e', 'B', 'G', 'D', 'A', 'E'],
     clef: 'treble', staffBotDia: 30,   // bottom staff line: written E4
-    chart: [40, 76],                   // pitch chart, sounding E2..E5
+    chart: [40, 81],                   // pitch chart, sounding E2..A5 (17th fret)
     scaleOctave: 3, rootMax: 57,       // circle-mode register
     arpBase: 48,                       // finder arpeggio root (C3)
     chords: true,                      // chord builder/finder + CAGED live here
@@ -564,7 +564,7 @@ const INSTRUMENTS = {
   bass: {
     strings: [43, 38, 33, 28], labels: ['G', 'D', 'A', 'E'],
     clef: 'bass', staffBotDia: 18,     // bottom staff line: written G2
-    chart: [28, 55],                   // sounding E1..G3
+    chart: [28, 60],                   // sounding E1..C4 (17th fret)
     scaleOctave: 2, rootMax: 40, // keep circle-mode roots low: E1..E2
     arpBase: 36,                       // C2
     chords: false,                     // single-note instrument; CAGED is six-string
@@ -599,7 +599,7 @@ const nStr = () => STRING_MIDI.length;
 
 // ---------- fretboard rendering ----------
 
-const NUM_FRETS = 12;
+const NUM_FRETS = 17;
 const FB = { nutX: 56, top: 30, gap: 26, scale: 1560 };
 
 function fretX(f) { return FB.nutX + FB.scale * (1 - 2 ** (-f / 12)); }
@@ -614,7 +614,7 @@ function drawFretboard(svg, opts = {}) {
   const n = nStr();
   const endX = fretX(NUM_FRETS);
   const yTop = stringY(0), yBot = stringY(n - 1);
-  svg.setAttribute('viewBox', `0 0 870 ${yBot + 42}`);
+  svg.setAttribute('viewBox', `0 0 ${Math.ceil(endX + 34)} ${yBot + 42}`);
 
   // nut + frets
   svg.appendChild(el('rect', { x: FB.nutX - 4, y: yTop - 2, width: 5, height: yBot - yTop + 4, fill: INK }));
@@ -628,7 +628,7 @@ function drawFretboard(svg, opts = {}) {
 
   // inlay dots
   const midY = (yTop + yBot) / 2;
-  for (const f of [3, 5, 7, 9]) {
+  for (const f of [3, 5, 7, 9, 15, 17].filter((f) => f <= NUM_FRETS)) {
     svg.appendChild(el('circle', { cx: noteX(f), cy: midY, r: 5, fill: INLAY }));
   }
   for (const y of [midY - FB.gap, midY + FB.gap]) {
@@ -643,7 +643,7 @@ function drawFretboard(svg, opts = {}) {
   }
 
   // fret numbers
-  for (const f of [3, 5, 7, 9, 12]) {
+  for (const f of [3, 5, 7, 9, 12, 15, 17].filter((f) => f <= NUM_FRETS)) {
     svg.appendChild(txt({ x: noteX(f), y: yBot + 26, 'font-size': 11, fill: MUTED, 'text-anchor': 'middle' }, String(f)));
   }
 
